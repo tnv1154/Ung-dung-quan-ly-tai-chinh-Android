@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function validWalletType(type) {
+      return type in ['CASH', 'BANK', 'EWALLET', 'OTHER'];
+    }
+
+    function validIconKey(iconKey) {
+      return iconKey in ['cash', 'bank', 'ewallet', 'other', 'card', 'wallet'];
+    }
+
+    function validCurrency(currency) {
+      return currency is string
+        && currency.size() >= 1
+        && currency.size() <= 10;
+    }
+
+    function validCategoryIcon(iconKey) {
+      return iconKey is string
+        && iconKey.size() >= 1
+        && iconKey.size() <= 40;
+    }
+
+    function validTransactionType(type) {
+      return type in ['INCOME', 'EXPENSE', 'TRANSFER'];
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /wallets/{walletId} {
+        allow read, write: if isOwner(userId)
+          && (
+            request.resource == null
+            || (
+              (!request.resource.data.keys().hasAny(['accountType']) || validWalletType(request.resource.data.accountType))
+              && (!request.resource.data.keys().hasAny(['iconKey']) || validIconKey(request.resource.data.iconKey))
+              && (!request.resource.data.keys().hasAny(['currency']) || validCurrency(request.resource.data.currency))
+              && (!request.resource.data.keys().hasAny(['includeInReport']) || request.resource.data.includeInReport is bool)
+              && (!request.resource.data.keys().hasAny(['providerName']) || request.resource.data.providerName is string)
+              && (!request.resource.data.keys().hasAny(['isLocked']) || request.resource.data.isLocked is bool)
+            )
+          );
+      }
+
+      match /transactions/{transactionId} {
+        allow read, write: if isOwner(userId)
+          && (
+            request.resource == null
+            || validTransactionType(request.resource.data.type)
+          );
+      }
+
+      match /categories/{categoryId} {
+        allow read, write: if isOwner(userId)
+          && (
+            request.resource == null
+            || (
+              validTransactionType(request.resource.data.type)
+              && (!request.resource.data.keys().hasAny(['parentName']) || request.resource.data.parentName is string)
+              && (!request.resource.data.keys().hasAny(['iconKey']) || validCategoryIcon(request.resource.data.iconKey))
+              && (!request.resource.data.keys().hasAny(['sortOrder']) || request.resource.data.sortOrder is int)
+            )
+          );
+      }
+
+      match /budgets/{budgetId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /notification_logs/{logId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /data_import_export_logs/{logId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+  }
+}
