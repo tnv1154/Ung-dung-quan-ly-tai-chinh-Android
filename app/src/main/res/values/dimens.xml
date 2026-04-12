@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <dimen name="screen_top_safe_margin">16dp</dimen>
-    <dimen name="screen_top_safe_margin_add">20dp</dimen>
+    <dimen name="screen_top_safe_margin">24dp</dimen>
+    <dimen name="screen_top_safe_margin_add">28dp</dimen>
 </resources>

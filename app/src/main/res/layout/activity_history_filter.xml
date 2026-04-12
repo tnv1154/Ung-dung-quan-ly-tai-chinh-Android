@@ -1,0 +1,327 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/surface_soft">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbarHistoryFilter"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/screen_top_safe_margin"
+        android:background="@android:color/transparent"
+        android:title="@string/history_filter_page_title"
+        android:titleTextColor="@color/text_primary"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:navigationIcon="@drawable/ic_wallet_back"
+        app:navigationIconTint="@color/text_primary" />
+
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tabHistoryFilterType"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:background="@android:color/white"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/toolbarHistoryFilter"
+        app:tabIndicatorColor="@color/blue_primary"
+        app:tabIndicatorFullWidth="false"
+        app:tabSelectedTextColor="@color/blue_primary"
+        app:tabTextColor="@color/text_primary" />
+
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:fillViewport="true"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tabHistoryFilterType">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:id="@+id/rowHistoryFilterAllTime"
+                android:layout_width="match_parent"
+                android:layout_height="88dp"
+                android:background="@android:color/white"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="34dp"
+                android:paddingEnd="28dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tvHistoryFilterAllTime"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/history_filter_all_time"
+                    android:textColor="@color/text_primary"
+                    android:textSize="22sp" />
+
+                <ImageView
+                    android:id="@+id/ivHistoryFilterCheckAllTime"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_action_check"
+                    android:visibility="invisible"
+                    app:tint="@color/blue_primary" />
+            </LinearLayout>
+
+            <View
+                android:id="@+id/dividerHistoryFilterAllTime"
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/rowHistoryFilterOption1"
+                android:layout_width="match_parent"
+                android:layout_height="88dp"
+                android:background="@android:color/white"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="34dp"
+                android:paddingEnd="28dp">
+
+                <TextView
+                    android:id="@+id/tvHistoryFilterOption1"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="@color/text_primary"
+                    android:textSize="22sp" />
+
+                <ImageView
+                    android:id="@+id/ivHistoryFilterCheckOption1"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_action_check"
+                    android:visibility="invisible"
+                    app:tint="@color/blue_primary" />
+            </LinearLayout>
+
+            <View
+                android:id="@+id/dividerHistoryFilterOption1"
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider" />
+
+            <LinearLayout
+                android:id="@+id/rowHistoryFilterOption2"
+                android:layout_width="match_parent"
+                android:layout_height="88dp"
+                android:background="@android:color/white"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="34dp"
+                android:paddingEnd="28dp">
+
+                <TextView
+                    android:id="@+id/tvHistoryFilterOption2"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="@color/text_primary"
+                    android:textSize="22sp" />
+
+                <ImageView
+                    android:id="@+id/ivHistoryFilterCheckOption2"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_action_check"
+                    android:visibility="invisible"
+                    app:tint="@color/blue_primary" />
+            </LinearLayout>
+
+            <View
+                android:id="@+id/dividerHistoryFilterOption2"
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider" />
+
+            <LinearLayout
+                android:id="@+id/rowHistoryFilterOption3"
+                android:layout_width="match_parent"
+                android:layout_height="88dp"
+                android:background="@android:color/white"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="34dp"
+                android:paddingEnd="28dp">
+
+                <TextView
+                    android:id="@+id/tvHistoryFilterOption3"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="@color/text_primary"
+                    android:textSize="22sp" />
+
+                <ImageView
+                    android:id="@+id/ivHistoryFilterCheckOption3"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_action_check"
+                    android:visibility="invisible"
+                    app:tint="@color/blue_primary" />
+            </LinearLayout>
+
+            <View
+                android:id="@+id/dividerHistoryFilterOption3"
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider" />
+
+            <LinearLayout
+                android:id="@+id/rowHistoryFilterOption4"
+                android:layout_width="match_parent"
+                android:layout_height="88dp"
+                android:background="@android:color/white"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="34dp"
+                android:paddingEnd="28dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tvHistoryFilterOption4"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="@color/text_primary"
+                    android:textSize="22sp" />
+
+                <ImageView
+                    android:id="@+id/ivHistoryFilterCheckOption4"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_action_check"
+                    android:visibility="invisible"
+                    app:tint="@color/blue_primary" />
+            </LinearLayout>
+
+            <View
+                android:id="@+id/dividerHistoryFilterOption4"
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/layoutHistoryFilterRange"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@android:color/white"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/rowHistoryFilterFrom"
+                    android:layout_width="match_parent"
+                    android:layout_height="88dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="34dp"
+                    android:paddingEnd="28dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/export_period_custom_from"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:id="@+id/tvHistoryFilterFromValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="18sp" />
+
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:layout_marginStart="8dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_wallet_chevron_right"
+                        app:tint="@color/text_secondary" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/divider" />
+
+                <LinearLayout
+                    android:id="@+id/rowHistoryFilterTo"
+                    android:layout_width="match_parent"
+                    android:layout_height="88dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="34dp"
+                    android:paddingEnd="28dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/export_period_custom_to"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:id="@+id/tvHistoryFilterToValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="18sp" />
+
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:layout_marginStart="8dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_wallet_chevron_right"
+                        app:tint="@color/text_secondary" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

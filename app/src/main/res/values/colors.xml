@@ -59,8 +59,18 @@
     <color name="wallet_form_header_bg">#DBEEFF</color>
     <color name="add_page_bg">#D7E4EF</color>
     <color name="add_mode_blue">#0D8BD9</color>
+    <color name="auth_button_blue">#69BDE5</color>
     <color name="add_amount_expense">#F25555</color>
     <color name="add_amount_income">#2BA64B</color>
     <color name="add_amount_transfer">#0D8BD9</color>
     <color name="add_row_icon_tint">#66748A</color>
+    <color name="export_format_excel_bg">#DDE7E2</color>
+    <color name="export_format_excel_icon">#2B8A3E</color>
+    <color name="export_format_csv_bg">#DDE5F8</color>
+    <color name="export_format_csv_icon">#2563EB</color>
+    <color name="export_format_pdf_icon">#111111</color>
+    <color name="export_success_ring">#CFEFD9</color>
+    <color name="export_success_dot">#45C977</color>
+    <color name="export_search_bg">#EAF0F7</color>
+    <color name="export_check_unselected">#C7D2E3</color>
 </resources>

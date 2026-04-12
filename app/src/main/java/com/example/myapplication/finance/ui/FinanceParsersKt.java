@@ -6,6 +6,7 @@ import com.example.myapplication.finance.model.Wallet;
 import com.google.firebase.Timestamp;
 
 import java.text.Normalizer;
+import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -26,6 +27,35 @@ public final class FinanceParsersKt {
     private static final Pattern MARKS_PATTERN = Pattern.compile("\\p{M}+");
     private static final Pattern NON_ALNUM_PATTERN = Pattern.compile("[^\\p{Alnum}]+");
     private static final Pattern AMOUNT_PATTERN = Pattern.compile("([+-]?\\d[\\d.,]*)\\s?(vnd|đ|vnđ)?", Pattern.CASE_INSENSITIVE);
+    private static final Pattern MB_GD_PATTERN = Pattern.compile(
+        "GD\\s*:\\s*([+-])\\s*([\\d.,]+)\\s*([A-Za-zđĐ]{1,5})?\\s*(\\d{1,2}/\\d{1,2}/\\d{2,4})?\\s*(\\d{1,2}:\\d{2})?",
+        Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern MB_DATE_TIME_PATTERN = Pattern.compile("(\\d{1,2}/\\d{1,2}/\\d{2,4})\\s+(\\d{1,2}:\\d{2})");
+    private static final Pattern MB_ACCOUNT_PATTERN = Pattern.compile("TK\\s*([A-Za-z0-9xX*]+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BIDV_AMOUNT_PATTERN = Pattern.compile("([+-])\\s*([\\d.,]+)\\s*([A-Za-zđĐ]{1,5})?", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BIDV_TIME_DATE_PATTERN = Pattern.compile("(\\d{1,2}:\\d{2})\\s*(\\d{1,2}/\\d{1,2}/\\d{2,4})");
+    private static final Pattern BIDV_ACCOUNT_PATTERN = Pattern.compile(
+        "(?:Tài khoản thanh toán|Tai khoan thanh toan)\\s*:\\s*([A-Za-z0-9xX*]+)",
+        Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern VCB_TRANSACTION_PATTERN = Pattern.compile(
+        "(?:Số\\s*dư|So\\s*du)\\s*TK\\s*VCB\\s*([A-Za-z0-9xX*]+)\\s*([+-])\\s*([\\d.,]+)\\s*([A-Za-zđĐ]{1,5})?\\s*(?:lúc|luc)\\s*(\\d{1,2}[-/]\\d{1,2}[-/]\\d{2,4})\\s*(\\d{1,2}:\\d{2}(?::\\d{2})?)",
+        Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern VIETIN_TIME_PATTERN = Pattern.compile(
+        "(?:Thời\\s*gian|Thoi\\s*gian)\\s*:\\s*(\\d{1,2}/\\d{1,2}/\\d{2,4})\\s*(\\d{1,2}:\\d{2}(?::\\d{2})?)",
+        Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern VIETIN_ACCOUNT_PATTERN = Pattern.compile(
+        "(?:Tài\\s*khoản|Tai\\s*khoan)\\s*:\\s*([A-Za-z0-9xX*]+)",
+        Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern VIETIN_TRANSACTION_PATTERN = Pattern.compile(
+        "(?:Giao\\s*dịch|Giao\\s*dich)\\s*:\\s*([+-])\\s*([\\d.,]+)\\s*([A-Za-zđĐ]{1,5})?",
+        Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern ACCOUNT_TOKEN_PATTERN = Pattern.compile("([A-Za-z0-9xX*]{4,})");
     private static final DateTimeFormatter CSV_DATE_FORMATTER =
         DateTimeFormatter.ofPattern("dd/MM/uuuu").withResolverStyle(ResolverStyle.STRICT);
     private static final DateTimeFormatter CSV_TIME_FORMATTER =
@@ -269,7 +299,64 @@ public final class FinanceParsersKt {
     }
 
     public static NotificationDraft parseNotificationText(String raw) {
-        String content = raw == null ? "" : raw;
+        return parseNotificationText(raw, null, null);
+    }
+
+    public static NotificationDraft parseMbBankNotificationText(String raw, String sourcePackage, String sourceAppName) {
+        String content = raw == null ? "" : raw.trim();
+        if (content.isEmpty()) {
+            return null;
+        }
+        return parseMbBankNotification(content, sourcePackage, sourceAppName);
+    }
+
+    public static NotificationDraft parseBidvNotificationText(String raw, String sourcePackage, String sourceAppName) {
+        String content = raw == null ? "" : raw.trim();
+        if (content.isEmpty()) {
+            return null;
+        }
+        return parseBidvNotification(content, sourcePackage, sourceAppName);
+    }
+
+    public static NotificationDraft parseVietcombankNotificationText(String raw, String sourcePackage, String sourceAppName) {
+        String content = raw == null ? "" : raw.trim();
+        if (content.isEmpty()) {
+            return null;
+        }
+        return parseVietcombankNotification(content, sourcePackage, sourceAppName);
+    }
+
+    public static NotificationDraft parseVietinBankNotificationText(String raw, String sourcePackage, String sourceAppName) {
+        String content = raw == null ? "" : raw.trim();
+        if (content.isEmpty()) {
+            return null;
+        }
+        return parseVietinBankNotification(content, sourcePackage, sourceAppName);
+    }
+
+    public static NotificationDraft parseNotificationText(String raw, String sourcePackage, String sourceAppName) {
+        String content = raw == null ? "" : raw.trim();
+        if (content.isEmpty()) {
+            return null;
+        }
+
+        NotificationDraft mbDraft = parseMbBankNotification(content, sourcePackage, sourceAppName);
+        if (mbDraft != null) {
+            return mbDraft;
+        }
+        NotificationDraft bidvDraft = parseBidvNotification(content, sourcePackage, sourceAppName);
+        if (bidvDraft != null) {
+            return bidvDraft;
+        }
+        NotificationDraft vcbDraft = parseVietcombankNotification(content, sourcePackage, sourceAppName);
+        if (vcbDraft != null) {
+            return vcbDraft;
+        }
+        NotificationDraft vietinDraft = parseVietinBankNotification(content, sourcePackage, sourceAppName);
+        if (vietinDraft != null) {
+            return vietinDraft;
+        }
+
         String normalized = normalizeToken(content);
         Double amount = extractAmountFromText(content);
         if (amount == null) {
@@ -286,12 +373,17 @@ public final class FinanceParsersKt {
         }
 
         String category = inferredType == TransactionType.INCOME ? "Thu từ thông báo" : "Chi từ thông báo";
-        String note = content.trim();
+        String note = content.substring(0, Math.min(content.length(), 200));
+        String source = safe(sourceAppName).trim();
         return new NotificationDraft(
             inferredType,
             amount,
             category,
-            note.substring(0, Math.min(note.length(), 200))
+            note,
+            "VND",
+            source,
+            "",
+            0L
         );
     }
 
@@ -314,6 +406,543 @@ public final class FinanceParsersKt {
             }
         }
         return max;
+    }
+
+    private static NotificationDraft parseMbBankNotification(String content, String sourcePackage, String sourceAppName) {
+        if (!isMbBankNotification(content, sourcePackage, sourceAppName)) {
+            return null;
+        }
+        String compact = content.replace('\n', ' ').replace('\r', ' ').trim();
+        Matcher gdMatcher = MB_GD_PATTERN.matcher(compact);
+        if (!gdMatcher.find()) {
+            return null;
+        }
+
+        String sign = safe(gdMatcher.group(1)).trim();
+        Double parsedAmount = parseMoney(gdMatcher.group(2));
+        if (parsedAmount == null) {
+            return null;
+        }
+        double amount = Math.abs(parsedAmount);
+        if (amount <= 0.0) {
+            return null;
+        }
+
+        TransactionType type = "+".equals(sign) ? TransactionType.INCOME : TransactionType.EXPENSE;
+        String currency = normalizeMbCurrency(gdMatcher.group(3));
+
+        long txTimeMillis = parseMbDateTimeToMillis(gdMatcher.group(4), gdMatcher.group(5));
+        if (txTimeMillis <= 0L) {
+            Matcher fallback = MB_DATE_TIME_PATTERN.matcher(compact);
+            if (fallback.find()) {
+                txTimeMillis = parseMbDateTimeToMillis(fallback.group(1), fallback.group(2));
+            }
+        }
+
+        String accountHint = extractMbAccountHint(compact);
+        String noteSegment = extractSectionValue(compact, "ND:");
+        if (noteSegment.isEmpty()) {
+            noteSegment = compact;
+        }
+        noteSegment = noteSegment.trim();
+
+        String normalizedNote = normalizeToken(noteSegment);
+        String category;
+        if (normalizedNote.contains("chuyentien") || normalizedNote.contains("chuyenkhoan")) {
+            category = type == TransactionType.INCOME ? "Thu chuyển khoản" : "Chuyển khoản";
+        } else {
+            category = defaultCategoryForType(type);
+        }
+
+        StringBuilder noteBuilder = new StringBuilder("MB Bank");
+        if (!accountHint.isEmpty()) {
+            noteBuilder.append(" ").append(accountHint);
+        }
+        if (!noteSegment.isEmpty()) {
+            noteBuilder.append(" - ").append(noteSegment);
+        }
+        String note = noteBuilder.toString().trim();
+        if (note.length() > 200) {
+            note = note.substring(0, 200);
+        }
+
+        return new NotificationDraft(
+            type,
+            amount,
+            category,
+            note,
+            currency,
+            "MB Bank",
+            accountHint,
+            txTimeMillis
+        );
+    }
+
+    private static NotificationDraft parseVietcombankNotification(String content, String sourcePackage, String sourceAppName) {
+        if (!isVietcombankNotification(content, sourcePackage, sourceAppName)) {
+            return null;
+        }
+        String compact = content.replace('\n', ' ').replace('\r', ' ').trim();
+        Matcher transactionMatcher = VCB_TRANSACTION_PATTERN.matcher(compact);
+        if (!transactionMatcher.find()) {
+            return null;
+        }
+        String accountHint = safe(transactionMatcher.group(1)).trim();
+        String sign = safe(transactionMatcher.group(2)).trim();
+        Double parsedAmount = parseMoney(transactionMatcher.group(3));
+        if (parsedAmount == null) {
+            return null;
+        }
+        double amount = Math.abs(parsedAmount);
+        if (amount <= 0.0) {
+            return null;
+        }
+        TransactionType type = "+".equals(sign) ? TransactionType.INCOME : TransactionType.EXPENSE;
+        String currency = normalizeCurrencyToken(transactionMatcher.group(4));
+        long txTimeMillis = parseVcbDateTimeToMillis(transactionMatcher.group(5), transactionMatcher.group(6));
+
+        String noteSegment = firstNonBlank(
+            extractAfterMarker(compact, "Ref "),
+            extractAfterMarker(compact, "REF "),
+            extractAfterMarker(compact, "Ref."),
+            extractAfterMarker(compact, "REF."),
+            compact
+        );
+        noteSegment = noteSegment.trim();
+        String normalizedNote = normalizeToken(noteSegment);
+        String category;
+        if (normalizedNote.contains("chuyentien")
+            || normalizedNote.contains("chuyenkhoan")
+            || normalizedNote.contains("cttu")) {
+            category = type == TransactionType.INCOME ? "Thu chuyển khoản" : "Chuyển khoản";
+        } else {
+            category = defaultCategoryForType(type);
+        }
+
+        StringBuilder noteBuilder = new StringBuilder("Vietcombank");
+        if (!accountHint.isEmpty()) {
+            noteBuilder.append(" ").append(accountHint);
+        }
+        if (!noteSegment.isEmpty()) {
+            noteBuilder.append(" - ").append(noteSegment);
+        }
+        String note = noteBuilder.toString().trim();
+        if (note.length() > 200) {
+            note = note.substring(0, 200);
+        }
+        return new NotificationDraft(
+            type,
+            amount,
+            category,
+            note,
+            currency,
+            "Vietcombank",
+            accountHint,
+            txTimeMillis
+        );
+    }
+
+    private static NotificationDraft parseVietinBankNotification(String content, String sourcePackage, String sourceAppName) {
+        if (!isVietinBankNotification(content, sourcePackage, sourceAppName)) {
+            return null;
+        }
+        String compact = content.replace('\n', ' ').replace('\r', ' ').trim();
+
+        Matcher transactionMatcher = VIETIN_TRANSACTION_PATTERN.matcher(compact);
+        if (!transactionMatcher.find()) {
+            return null;
+        }
+        String sign = safe(transactionMatcher.group(1)).trim();
+        Double parsedAmount = parseMoney(transactionMatcher.group(2));
+        if (parsedAmount == null) {
+            return null;
+        }
+        double amount = Math.abs(parsedAmount);
+        if (amount <= 0.0) {
+            return null;
+        }
+        TransactionType type = "+".equals(sign) ? TransactionType.INCOME : TransactionType.EXPENSE;
+        String currency = normalizeCurrencyToken(transactionMatcher.group(3));
+
+        Matcher accountMatcher = VIETIN_ACCOUNT_PATTERN.matcher(compact);
+        String accountHint = accountMatcher.find() ? safe(accountMatcher.group(1)).trim() : "";
+
+        long txTimeMillis = 0L;
+        Matcher timeMatcher = VIETIN_TIME_PATTERN.matcher(compact);
+        if (timeMatcher.find()) {
+            txTimeMillis = parseDateTimeToMillis(safe(timeMatcher.group(1)), safe(timeMatcher.group(2)));
+        }
+
+        String noteSegment = firstNonBlank(
+            extractAfterMarker(compact, "Nội dung:"),
+            extractAfterMarker(compact, "Noi dung:"),
+            compact
+        );
+        noteSegment = noteSegment.trim();
+        String normalizedNote = normalizeToken(noteSegment);
+
+        String category;
+        if (normalizedNote.contains("chuyentien")
+            || normalizedNote.contains("chuyenkhoan")
+            || normalizedNote.contains("ctden")
+            || normalizedNote.contains("cttu")) {
+            category = type == TransactionType.INCOME ? "Thu chuyển khoản" : "Chuyển khoản";
+        } else {
+            category = defaultCategoryForType(type);
+        }
+
+        StringBuilder noteBuilder = new StringBuilder("VietinBank");
+        if (!accountHint.isEmpty()) {
+            noteBuilder.append(" ").append(accountHint);
+        }
+        if (!noteSegment.isEmpty()) {
+            noteBuilder.append(" - ").append(noteSegment);
+        }
+        String note = noteBuilder.toString().trim();
+        if (note.length() > 200) {
+            note = note.substring(0, 200);
+        }
+        return new NotificationDraft(
+            type,
+            amount,
+            category,
+            note,
+            currency,
+            "VietinBank",
+            accountHint,
+            txTimeMillis
+        );
+    }
+
+    private static NotificationDraft parseBidvNotification(String content, String sourcePackage, String sourceAppName) {
+        if (!isBidvNotification(content, sourcePackage, sourceAppName)) {
+            return null;
+        }
+        String compact = content.replace('\n', ' ').replace('\r', ' ').trim();
+        String amountSection = firstNonBlank(
+            extractSectionValue(compact, "Số tiền GD:"),
+            extractSectionValue(compact, "So tien GD:")
+        );
+        if (amountSection.isEmpty()) {
+            return null;
+        }
+        Matcher amountMatcher = BIDV_AMOUNT_PATTERN.matcher(amountSection);
+        if (!amountMatcher.find()) {
+            return null;
+        }
+        String sign = safe(amountMatcher.group(1)).trim();
+        Double parsedAmount = parseMoney(amountMatcher.group(2));
+        if (parsedAmount == null) {
+            return null;
+        }
+        double amount = Math.abs(parsedAmount);
+        if (amount <= 0.0) {
+            return null;
+        }
+        TransactionType type = "+".equals(sign) ? TransactionType.INCOME : TransactionType.EXPENSE;
+        String currency = normalizeCurrencyToken(amountMatcher.group(3));
+
+        String timeSection = firstNonBlank(
+            extractSectionValue(compact, "Thời gian giao dịch:"),
+            extractSectionValue(compact, "Thoi gian giao dich:")
+        );
+        long txTimeMillis = 0L;
+        Matcher timeMatcher = BIDV_TIME_DATE_PATTERN.matcher(timeSection.isEmpty() ? compact : timeSection);
+        if (timeMatcher.find()) {
+            txTimeMillis = parseDateTimeToMillis(safe(timeMatcher.group(2)), safe(timeMatcher.group(1)));
+        }
+
+        String accountHint = firstNonBlank(
+            extractBidvAccountHint(content),
+            extractBidvAccountHint(compact),
+            extractFirstAccountToken(
+                firstNonBlank(
+                    extractSectionValue(compact, "Tài khoản thanh toán:"),
+                    extractSectionValue(compact, "Tai khoan thanh toan:")
+                )
+            )
+        );
+        String noteSegment = firstNonBlank(
+            extractBetweenMarkers(compact, "Nội dung giao dịch:", "Mã giao dịch:"),
+            extractBetweenMarkers(compact, "Noi dung giao dich:", "Ma giao dich:"),
+            extractSectionValue(compact, "Nội dung giao dịch:"),
+            extractSectionValue(compact, "Noi dung giao dich:")
+        );
+        if (noteSegment.isEmpty()) {
+            noteSegment = compact;
+        }
+        noteSegment = noteSegment.trim();
+
+        String normalizedNote = normalizeToken(noteSegment);
+        String category;
+        if (normalizedNote.contains("chuyentien") || normalizedNote.contains("chuyenkhoan")) {
+            category = type == TransactionType.INCOME ? "Thu chuyển khoản" : "Chuyển khoản";
+        } else {
+            category = defaultCategoryForType(type);
+        }
+
+        StringBuilder noteBuilder = new StringBuilder("BIDV");
+        if (!accountHint.isEmpty()) {
+            noteBuilder.append(" ").append(accountHint);
+        }
+        if (!noteSegment.isEmpty()) {
+            noteBuilder.append(" - ").append(noteSegment);
+        }
+        String note = noteBuilder.toString().trim();
+        if (note.length() > 200) {
+            note = note.substring(0, 200);
+        }
+        return new NotificationDraft(
+            type,
+            amount,
+            category,
+            note,
+            currency,
+            "BIDV SmartBanking",
+            accountHint,
+            txTimeMillis
+        );
+    }
+
+    private static boolean isMbBankNotification(String content, String sourcePackage, String sourceAppName) {
+        String normalizedContent = normalizeToken(content);
+        String normalizedPackage = normalizeToken(sourcePackage);
+        String normalizedSource = normalizeToken(sourceAppName);
+
+        boolean sourceLooksMb = normalizedPackage.contains("mbbank")
+            || normalizedPackage.contains("mbmobile")
+            || (normalizedPackage.contains("mb") && (normalizedPackage.contains("bank") || normalizedPackage.contains("mobile")))
+            || normalizedSource.contains("mbbank")
+            || normalizedSource.contains("mbbankbaygio");
+        if (sourceLooksMb) {
+            return true;
+        }
+        return normalizedContent.contains("thongbaobiendongsodu")
+            && normalizedContent.contains("gd")
+            && normalizedContent.contains("tk");
+    }
+
+    private static boolean isBidvNotification(String content, String sourcePackage, String sourceAppName) {
+        String normalizedContent = normalizeToken(content);
+        String normalizedPackage = normalizeToken(sourcePackage);
+        String normalizedSource = normalizeToken(sourceAppName);
+
+        boolean sourceLooksBidv = normalizedPackage.contains("bidv")
+            || normalizedPackage.contains("smartbanking")
+            || normalizedSource.contains("bidv")
+            || normalizedSource.contains("smartbanking");
+        if (sourceLooksBidv) {
+            return true;
+        }
+        return normalizedContent.contains("thongbaobidv")
+            && normalizedContent.contains("sotiengd")
+            && normalizedContent.contains("taikhoanthanhtoan");
+    }
+
+    private static boolean isVietcombankNotification(String content, String sourcePackage, String sourceAppName) {
+        String normalizedContent = normalizeToken(content);
+        String normalizedPackage = normalizeToken(sourcePackage);
+        String normalizedSource = normalizeToken(sourceAppName);
+
+        boolean sourceLooksVcb = normalizedPackage.contains("vietcombank")
+            || normalizedPackage.contains("vcbdigibank")
+            || normalizedSource.contains("vietcombank")
+            || normalizedSource.contains("vcb");
+        if (sourceLooksVcb) {
+            return true;
+        }
+        return normalizedContent.contains("sodutkvcb")
+            && normalizedContent.contains("luc")
+            && normalizedContent.contains("ref");
+    }
+
+    private static boolean isVietinBankNotification(String content, String sourcePackage, String sourceAppName) {
+        String normalizedContent = normalizeToken(content);
+        String normalizedPackage = normalizeToken(sourcePackage);
+        String normalizedSource = normalizeToken(sourceAppName);
+
+        boolean sourceLooksVietin = normalizedPackage.contains("vietin")
+            || normalizedSource.contains("vietin")
+            || normalizedSource.contains("vietinbank");
+        if (sourceLooksVietin) {
+            return true;
+        }
+        return normalizedContent.contains("thoigian")
+            && normalizedContent.contains("taikhoan")
+            && normalizedContent.contains("giaodich")
+            && normalizedContent.contains("soduhientai")
+            && normalizedContent.contains("noidung");
+    }
+
+    private static String extractMbAccountHint(String content) {
+        Matcher matcher = MB_ACCOUNT_PATTERN.matcher(content);
+        if (!matcher.find()) {
+            return "";
+        }
+        return safe(matcher.group(1)).trim();
+    }
+
+    private static String extractBidvAccountHint(String content) {
+        Matcher matcher = BIDV_ACCOUNT_PATTERN.matcher(safe(content));
+        if (!matcher.find()) {
+            return "";
+        }
+        return safe(matcher.group(1)).trim();
+    }
+
+    private static String extractFirstAccountToken(String raw) {
+        Matcher matcher = ACCOUNT_TOKEN_PATTERN.matcher(safe(raw));
+        if (!matcher.find()) {
+            return "";
+        }
+        return safe(matcher.group(1)).trim();
+    }
+
+    private static String extractSectionValue(String content, String marker) {
+        if (content == null || marker == null || marker.trim().isEmpty()) {
+            return "";
+        }
+        String upper = content.toUpperCase(Locale.ROOT);
+        String upperMarker = marker.toUpperCase(Locale.ROOT);
+        int start = upper.indexOf(upperMarker);
+        if (start < 0) {
+            return "";
+        }
+        int from = start + marker.length();
+        int end = content.indexOf("|", from);
+        if (end < 0) {
+            end = content.length();
+        }
+        return safe(content.substring(from, end)).trim();
+    }
+
+    private static long parseMbDateTimeToMillis(String rawDate, String rawTime) {
+        return parseDateTimeToMillis(rawDate, rawTime);
+    }
+
+    private static long parseVcbDateTimeToMillis(String rawDate, String rawTime) {
+        String datePart = safe(rawDate).trim().replace('/', '-');
+        String timePart = safe(rawTime).trim();
+        if (datePart.isEmpty() || timePart.isEmpty()) {
+            return 0L;
+        }
+        String[] dateParts = datePart.split("-");
+        String[] timeParts = timePart.split(":");
+        if (dateParts.length != 3 || timeParts.length < 2) {
+            return 0L;
+        }
+        try {
+            int day = Integer.parseInt(dateParts[0]);
+            int month = Integer.parseInt(dateParts[1]);
+            int year = Integer.parseInt(dateParts[2]);
+            int hour = Integer.parseInt(timeParts[0]);
+            int minute = Integer.parseInt(timeParts[1]);
+            int second = timeParts.length >= 3 ? Integer.parseInt(timeParts[2]) : 0;
+            if (year < 100) {
+                year += 2000;
+            }
+            LocalDateTime localDateTime = LocalDateTime.of(year, month, day, hour, minute, second);
+            return localDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        } catch (NumberFormatException | DateTimeException ignored) {
+            return 0L;
+        }
+    }
+
+    private static long parseDateTimeToMillis(String rawDate, String rawTime) {
+        String datePart = safe(rawDate).trim();
+        String timePart = safe(rawTime).trim();
+        if (datePart.isEmpty() || timePart.isEmpty()) {
+            return 0L;
+        }
+        String[] dateParts = datePart.split("/");
+        String[] timeParts = timePart.split(":");
+        if (dateParts.length != 3 || timeParts.length != 2) {
+            return 0L;
+        }
+        try {
+            int day = Integer.parseInt(dateParts[0]);
+            int month = Integer.parseInt(dateParts[1]);
+            int year = Integer.parseInt(dateParts[2]);
+            int hour = Integer.parseInt(timeParts[0]);
+            int minute = Integer.parseInt(timeParts[1]);
+            if (year < 100) {
+                year += 2000;
+            }
+            LocalDateTime localDateTime = LocalDateTime.of(year, month, day, hour, minute);
+            return localDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        } catch (NumberFormatException | DateTimeException ignored) {
+            return 0L;
+        }
+    }
+
+    private static String normalizeMbCurrency(String rawCurrency) {
+        return normalizeCurrencyToken(rawCurrency);
+    }
+
+    private static String normalizeCurrencyToken(String rawCurrency) {
+        String currency = safe(rawCurrency).trim().toUpperCase(Locale.ROOT);
+        if (currency.isEmpty()) {
+            return "VND";
+        }
+        if ("Đ".equals(currency) || "VNĐ".equals(currency) || "VND".equals(currency)) {
+            return "VND";
+        }
+        return currency;
+    }
+
+    private static String extractBetweenMarkers(String content, String startMarker, String endMarker) {
+        if (content == null || startMarker == null || startMarker.trim().isEmpty()) {
+            return "";
+        }
+        String upper = content.toUpperCase(Locale.ROOT);
+        String upperStart = startMarker.toUpperCase(Locale.ROOT);
+        int start = upper.indexOf(upperStart);
+        if (start < 0) {
+            return "";
+        }
+        int from = start + startMarker.length();
+        int end = content.length();
+        if (endMarker != null && !endMarker.trim().isEmpty()) {
+            String upperEnd = endMarker.toUpperCase(Locale.ROOT);
+            int candidateEnd = upper.indexOf(upperEnd, from);
+            if (candidateEnd >= 0) {
+                end = candidateEnd;
+            }
+        }
+        if (from >= end || from >= content.length()) {
+            return "";
+        }
+        return safe(content.substring(from, end)).trim();
+    }
+
+    private static String extractAfterMarker(String content, String marker) {
+        if (content == null || marker == null || marker.trim().isEmpty()) {
+            return "";
+        }
+        String upper = content.toUpperCase(Locale.ROOT);
+        String upperMarker = marker.toUpperCase(Locale.ROOT);
+        int start = upper.indexOf(upperMarker);
+        if (start < 0) {
+            return "";
+        }
+        int from = start + marker.length();
+        if (from >= content.length()) {
+            return "";
+        }
+        return safe(content.substring(from)).trim();
+    }
+
+    private static String firstNonBlank(String... values) {
+        if (values == null) {
+            return "";
+        }
+        for (String value : values) {
+            String normalized = safe(value).trim();
+            if (!normalized.isEmpty()) {
+                return normalized;
+            }
+        }
+        return "";
     }
 
     public static String defaultCategoryForType(TransactionType type) {

@@ -75,6 +75,22 @@
             android:exported="false"
             android:theme="@style/Theme.MyApplication" />
         <activity
+            android:name=".xmlui.ExportSuccessActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
+            android:name=".xmlui.ExportWalletPickerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
+            android:name=".xmlui.ExportPeriodActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
+            android:name=".xmlui.ExportDataActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
             android:name=".xmlui.CsvImportSuccessActivity"
             android:exported="false"
             android:theme="@style/Theme.MyApplication" />
@@ -91,6 +107,10 @@
             android:exported="false"
             android:theme="@style/Theme.MyApplication" />
         <activity
+            android:name=".xmlui.AutoEntryActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
             android:name=".xmlui.CurrencyConverterActivity"
             android:exported="false"
             android:theme="@style/Theme.MyApplication" />
@@ -100,6 +120,10 @@
             android:theme="@style/Theme.MyApplication" />
         <activity
             android:name=".xmlui.BudgetEditorActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
+            android:name=".xmlui.BudgetCategoryPickerActivity"
             android:exported="false"
             android:theme="@style/Theme.MyApplication" />
         <activity
@@ -119,6 +143,10 @@
             android:exported="false"
             android:theme="@style/Theme.MyApplication" />
         <activity
+            android:name=".xmlui.HistoryFilterActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
             android:name=".xmlui.WalletSuccessActivity"
             android:exported="false"
             android:theme="@style/Theme.MyApplication" />
@@ -128,6 +156,10 @@
             android:theme="@style/Theme.MyApplication.AddTransaction" />
         <activity
             android:name=".xmlui.ReportActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
+            android:name=".xmlui.ReportDrilldownActivity"
             android:exported="false"
             android:theme="@style/Theme.MyApplication" />
         <activity
@@ -146,6 +178,18 @@
             android:theme="@style/Theme.MyApplication" />
         <activity
             android:name=".xmlui.AuthActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
+            android:name=".xmlui.ForgotPasswordActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
+            android:name=".xmlui.VerifyResetCodeActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
+            android:name=".xmlui.CreateNewPasswordActivity"
             android:exported="false"
             android:theme="@style/Theme.MyApplication" />
         <activity

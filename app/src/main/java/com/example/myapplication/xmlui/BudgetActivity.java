@@ -139,6 +139,7 @@ public class BudgetActivity extends AppCompatActivity {
             double spent = BudgetCycleUtils.calculateSpentInWindow(
                 budget,
                 state.getTransactions(),
+                CategoryFallbackMerger.mergeWithFallbacks(state.getCategories()),
                 zoneId,
                 window.getStart(),
                 window.getEnd()

@@ -1,7 +1,6 @@
 package com.example.myapplication.xmlui;
 
 import android.content.Intent;
-import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -9,6 +8,8 @@ import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
@@ -20,6 +21,7 @@ import com.example.myapplication.MainActivity;
 import com.example.myapplication.R;
 import com.example.myapplication.finance.data.FirestoreFinanceRepository;
 import com.example.myapplication.finance.model.FinanceTransaction;
+import com.example.myapplication.finance.model.TransactionCategory;
 import com.example.myapplication.finance.model.TransactionType;
 import com.example.myapplication.finance.model.Wallet;
 import com.example.myapplication.finance.ui.FinanceUiState;
@@ -34,6 +36,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 
 import java.time.Instant;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -46,9 +49,40 @@ public class HistoryActivity extends AppCompatActivity {
 
     public static final String EXTRA_SOURCE_NAV_ITEM_ID = "extra_source_nav_item_id";
 
-    private enum Period {
-        ALL, DAY, WEEK, MONTH, QUARTER
-    }
+    private static final ZoneId DEVICE_ZONE = ZoneId.systemDefault();
+
+    private final ActivityResultLauncher<Intent> filterLauncher =
+        registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+            if (result.getResultCode() != RESULT_OK || result.getData() == null) {
+                return;
+            }
+            Intent data = result.getData();
+            String resultKey = data.getStringExtra(HistoryFilterActivity.EXTRA_RESULT_KEY);
+            if (resultKey != null && !resultKey.isBlank()) {
+                selectedFilterKey = resultKey;
+            }
+            String resultLabel = data.getStringExtra(HistoryFilterActivity.EXTRA_RESULT_LABEL);
+            if (resultLabel != null && !resultLabel.isBlank()) {
+                selectedFilterLabel = resultLabel;
+            }
+            boolean hasRange = data.getBooleanExtra(HistoryFilterActivity.EXTRA_RESULT_HAS_RANGE, false);
+            if (hasRange) {
+                long startEpoch = data.getLongExtra(HistoryFilterActivity.EXTRA_RESULT_START_EPOCH, 0L);
+                long endEpoch = data.getLongExtra(HistoryFilterActivity.EXTRA_RESULT_END_EPOCH, 0L);
+                if (endEpoch > startEpoch) {
+                    filterStartEpochSecond = startEpoch;
+                    filterEndEpochSecond = endEpoch;
+                } else {
+                    filterStartEpochSecond = null;
+                    filterEndEpochSecond = null;
+                }
+            } else {
+                filterStartEpochSecond = null;
+                filterEndEpochSecond = null;
+            }
+            refreshFilterPickerLabel();
+            applyFilters();
+        });
 
     private SessionViewModel sessionViewModel;
     private FinanceViewModel financeViewModel;
@@ -60,14 +94,13 @@ public class HistoryActivity extends AppCompatActivity {
     private TextView tvExpense;
     private TextView tvEmpty;
     private TextInputEditText etSearch;
-    private MaterialButton btnAll;
-    private MaterialButton btnDay;
-    private MaterialButton btnWeek;
-    private MaterialButton btnMonth;
-    private MaterialButton btnQuarter;
+    private MaterialButton btnFilterPicker;
 
-    private Period selectedPeriod = Period.ALL;
     private String searchQuery = "";
+    private String selectedFilterLabel = "";
+    private String selectedFilterKey = HistoryFilterActivity.KEY_MONTH_THIS;
+    private Long filterStartEpochSecond = null;
+    private Long filterEndEpochSecond = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,11 +109,11 @@ public class HistoryActivity extends AppCompatActivity {
         bindViews();
         setupToolbar();
         setupBottomNavigation();
-        setupFilterButtons();
+        setupFilterPicker();
         setupSearch();
         setupTransactionsList();
         setupSession();
-        refreshFilterButtonUi();
+        applyDefaultMonthFilter();
     }
 
     private void setupToolbar() {
@@ -95,11 +128,7 @@ public class HistoryActivity extends AppCompatActivity {
         tvExpense = findViewById(R.id.tvHistoryExpense);
         tvEmpty = findViewById(R.id.tvHistoryEmpty);
         etSearch = findViewById(R.id.etHistorySearch);
-        btnAll = findViewById(R.id.btnHistoryAll);
-        btnDay = findViewById(R.id.btnHistoryDay);
-        btnWeek = findViewById(R.id.btnHistoryWeek);
-        btnMonth = findViewById(R.id.btnHistoryMonth);
-        btnQuarter = findViewById(R.id.btnHistoryQuarter);
+        btnFilterPicker = findViewById(R.id.btnHistoryFilterPicker);
     }
 
     private void setupBottomNavigation() {
@@ -138,12 +167,9 @@ public class HistoryActivity extends AppCompatActivity {
         });
     }
 
-    private void setupFilterButtons() {
-        btnAll.setOnClickListener(v -> onPeriodChanged(Period.ALL));
-        btnDay.setOnClickListener(v -> onPeriodChanged(Period.DAY));
-        btnWeek.setOnClickListener(v -> onPeriodChanged(Period.WEEK));
-        btnMonth.setOnClickListener(v -> onPeriodChanged(Period.MONTH));
-        btnQuarter.setOnClickListener(v -> onPeriodChanged(Period.QUARTER));
+    private void setupFilterPicker() {
+        btnFilterPicker.setOnClickListener(v -> openFilterPage());
+        refreshFilterPickerLabel();
     }
 
     private void setupSearch() {
@@ -167,13 +193,25 @@ public class HistoryActivity extends AppCompatActivity {
     private void setupTransactionsList() {
         RecyclerView recyclerView = findViewById(R.id.rvHistoryTransactions);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        transactionAdapter = new TransactionRowAdapter(this::confirmDeleteTransaction);
+        transactionAdapter = new TransactionRowAdapter(
+            this::confirmDeleteTransaction,
+            this::openEditTransaction,
+            true
+        );
         recyclerView.setAdapter(transactionAdapter);
     }
 
     private void setupSession() {
         sessionViewModel = new ViewModelProvider(this).get(SessionViewModel.class);
         sessionViewModel.getUiStateLiveData().observe(this, this::renderSessionState);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (financeViewModel != null) {
+            financeViewModel.refreshRealtimeSync();
+        }
     }
 
     private void renderSessionState(@NonNull SessionUiState state) {
@@ -200,44 +238,63 @@ public class HistoryActivity extends AppCompatActivity {
         applyFilters();
     }
 
-    private void onPeriodChanged(Period period) {
-        selectedPeriod = period;
-        refreshFilterButtonUi();
-        applyFilters();
+    private void applyDefaultMonthFilter() {
+        YearMonth month = YearMonth.now(DEVICE_ZONE);
+        ZonedDateTime start = month.atDay(1).atStartOfDay(DEVICE_ZONE);
+        selectedFilterKey = HistoryFilterActivity.KEY_MONTH_THIS;
+        selectedFilterLabel = getString(R.string.history_filter_month_this);
+        filterStartEpochSecond = start.toEpochSecond();
+        filterEndEpochSecond = start.plusMonths(1).toEpochSecond();
+        refreshFilterPickerLabel();
     }
 
-    private void refreshFilterButtonUi() {
-        styleFilterButton(btnAll, selectedPeriod == Period.ALL);
-        styleFilterButton(btnDay, selectedPeriod == Period.DAY);
-        styleFilterButton(btnWeek, selectedPeriod == Period.WEEK);
-        styleFilterButton(btnMonth, selectedPeriod == Period.MONTH);
-        styleFilterButton(btnQuarter, selectedPeriod == Period.QUARTER);
+    private void openFilterPage() {
+        Intent intent = new Intent(this, HistoryFilterActivity.class);
+        intent.putExtra(HistoryFilterActivity.EXTRA_SELECTED_KEY, selectedFilterKey);
+        boolean hasRange = filterStartEpochSecond != null && filterEndEpochSecond != null;
+        intent.putExtra(HistoryFilterActivity.EXTRA_HAS_RANGE, hasRange);
+        if (hasRange) {
+            intent.putExtra(HistoryFilterActivity.EXTRA_START_EPOCH, filterStartEpochSecond);
+            intent.putExtra(HistoryFilterActivity.EXTRA_END_EPOCH, filterEndEpochSecond);
+        }
+        filterLauncher.launch(intent);
     }
 
-    private void styleFilterButton(MaterialButton button, boolean selected) {
-        int fill = selected ? R.color.blue_primary : R.color.card_bg;
-        int text = selected ? android.R.color.white : R.color.text_primary;
-        int stroke = selected ? R.color.blue_primary : R.color.divider;
-        button.setBackgroundTintList(ColorStateList.valueOf(getColor(fill)));
-        button.setStrokeColor(ColorStateList.valueOf(getColor(stroke)));
-        button.setTextColor(getColor(text));
+    private void refreshFilterPickerLabel() {
+        if (selectedFilterLabel == null || selectedFilterLabel.trim().isEmpty()) {
+            selectedFilterLabel = getString(R.string.history_filter_all_time);
+        }
+        btnFilterPicker.setText(selectedFilterLabel);
     }
 
     private void applyFilters() {
         if (latestState == null) {
             return;
         }
-        Map<String, String> walletNameById = new HashMap<>();
+        Map<String, Wallet> walletById = new HashMap<>();
         for (Wallet wallet : latestState.getWallets()) {
-            walletNameById.put(wallet.getId(), wallet.getName());
+            walletById.put(wallet.getId(), wallet);
         }
+        Map<String, TransactionCategory> categoryByKey = buildCategoryByKey(latestState.getCategories());
 
         List<UiTransaction> filtered = new ArrayList<>();
         for (FinanceTransaction tx : latestState.getTransactions()) {
-            if (!matchesPeriod(tx, selectedPeriod)) {
+            if (!matchesSelectedRange(tx)) {
                 continue;
             }
-            String walletName = walletNameById.getOrDefault(tx.getWalletId(), getString(R.string.label_source_wallet));
+            Wallet wallet = walletById.get(tx.getWalletId());
+            String walletName = wallet == null ? getString(R.string.label_source_wallet) : wallet.getName();
+            String walletIconKey = wallet == null ? "cash" : wallet.getIconKey();
+            String walletAccountType = wallet == null ? "CASH" : wallet.getAccountType();
+            Wallet destinationWallet = tx.getToWalletId() == null ? null : walletById.get(tx.getToWalletId());
+            String destinationWalletName = destinationWallet == null ? "" : destinationWallet.getName();
+            String destinationWalletIconKey = destinationWallet == null ? "cash" : destinationWallet.getIconKey();
+            String destinationWalletAccountType = destinationWallet == null ? "CASH" : destinationWallet.getAccountType();
+            TransactionCategory category = categoryByKey.get(categoryKey(tx.getType(), tx.getCategory()));
+            String categoryIconKey = category == null ? "" : category.getIconKey();
+            if (categoryIconKey == null || categoryIconKey.trim().isEmpty()) {
+                categoryIconKey = CategoryUiHelper.inferIconKeyFromCategoryName(tx.getCategory(), tx.getType());
+            }
             UiTransaction ui = new UiTransaction(
                 tx.getId(),
                 walletName,
@@ -245,7 +302,13 @@ public class HistoryActivity extends AppCompatActivity {
                 tx.getNote(),
                 tx.getType().name(),
                 tx.getAmount(),
-                tx.getCreatedAt()
+                tx.getCreatedAt(),
+                categoryIconKey,
+                walletIconKey,
+                walletAccountType,
+                destinationWalletName,
+                destinationWalletIconKey,
+                destinationWalletAccountType
             );
             if (!searchQuery.isEmpty()) {
                 String haystack = (ui.getCategory() + " " + ui.getNote() + " " + ui.getWalletName() + " " + ui.getType())
@@ -256,6 +319,8 @@ public class HistoryActivity extends AppCompatActivity {
             }
             filtered.add(ui);
         }
+
+        filtered.sort((left, right) -> Long.compare(right.getCreatedAt().getSeconds(), left.getCreatedAt().getSeconds()));
 
         double totalIncome = 0.0;
         double totalExpense = 0.0;
@@ -273,30 +338,30 @@ public class HistoryActivity extends AppCompatActivity {
         tvEmpty.setVisibility(filtered.isEmpty() ? View.VISIBLE : View.GONE);
     }
 
-    private boolean matchesPeriod(FinanceTransaction tx, Period period) {
-        if (period == Period.ALL) {
-            return true;
+    private Map<String, TransactionCategory> buildCategoryByKey(List<TransactionCategory> categories) {
+        Map<String, TransactionCategory> map = new HashMap<>();
+        for (TransactionCategory category : categories) {
+            map.put(categoryKey(category.getType(), category.getName()), category);
         }
-        ZonedDateTime date = Instant.ofEpochSecond(tx.getCreatedAt().getSeconds(), tx.getCreatedAt().getNanoseconds())
-            .atZone(ZoneId.systemDefault());
-        ZonedDateTime now = ZonedDateTime.now();
-        switch (period) {
-            case DAY:
-                return date.toLocalDate().equals(now.toLocalDate());
-            case WEEK: {
-                ZonedDateTime weekStart = now.minusDays(now.getDayOfWeek().getValue() - 1L).toLocalDate().atStartOfDay(now.getZone());
-                ZonedDateTime weekEnd = weekStart.plusDays(7);
-                return !date.isBefore(weekStart) && date.isBefore(weekEnd);
-            }
-            case QUARTER: {
-                int quarterDate = ((date.getMonthValue() - 1) / 3) + 1;
-                int quarterNow = ((now.getMonthValue() - 1) / 3) + 1;
-                return date.getYear() == now.getYear() && quarterDate == quarterNow;
-            }
-            case MONTH:
-            default:
-                return date.getYear() == now.getYear() && date.getMonth() == now.getMonth();
+        return map;
+    }
+
+    private String categoryKey(TransactionType type, String categoryName) {
+        return type.name() + "::" + CategoryUiHelper.normalize(categoryName);
+    }
+
+    private boolean matchesSelectedRange(FinanceTransaction tx) {
+        long epochSeconds = Instant.ofEpochSecond(
+            tx.getCreatedAt().getSeconds(),
+            tx.getCreatedAt().getNanoseconds()
+        ).atZone(DEVICE_ZONE).toEpochSecond();
+        if (filterStartEpochSecond != null && epochSeconds < filterStartEpochSecond) {
+            return false;
         }
+        if (filterEndEpochSecond != null && epochSeconds >= filterEndEpochSecond) {
+            return false;
+        }
+        return true;
     }
 
     private void confirmDeleteTransaction(UiTransaction transaction) {
@@ -311,6 +376,57 @@ public class HistoryActivity extends AppCompatActivity {
                 }
             })
             .show();
+    }
+
+    private void openEditTransaction(UiTransaction transaction) {
+        if (transaction == null || latestState == null) {
+            return;
+        }
+        FinanceTransaction target = findTransactionById(transaction.getId());
+        if (target == null) {
+            Toast.makeText(this, R.string.error_unknown, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent intent = new Intent(this, AddTransactionActivity.class);
+        intent.putExtra(AddTransactionActivity.EXTRA_EDIT_TRANSACTION_ID, target.getId());
+        intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_MODE, resolvePrefillMode(target.getType()));
+        intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_SOURCE_WALLET_ID, target.getWalletId());
+        intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_DESTINATION_WALLET_ID, target.getToWalletId());
+        intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_AMOUNT, target.getAmount());
+        intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_NOTE, target.getNote());
+        intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_CATEGORY_NAME, target.getCategory());
+        intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_TIME_MILLIS, toEpochMillis(target));
+        startActivity(intent);
+    }
+
+    private FinanceTransaction findTransactionById(String transactionId) {
+        if (transactionId == null || transactionId.trim().isEmpty()) {
+            return null;
+        }
+        for (FinanceTransaction transaction : latestState.getTransactions()) {
+            if (transactionId.equals(transaction.getId())) {
+                return transaction;
+            }
+        }
+        return null;
+    }
+
+    private String resolvePrefillMode(TransactionType type) {
+        if (type == TransactionType.INCOME) {
+            return AddTransactionActivity.MODE_INCOME;
+        }
+        if (type == TransactionType.TRANSFER) {
+            return AddTransactionActivity.MODE_TRANSFER;
+        }
+        return AddTransactionActivity.MODE_EXPENSE;
+    }
+
+    private long toEpochMillis(FinanceTransaction transaction) {
+        if (transaction == null || transaction.getCreatedAt() == null) {
+            return System.currentTimeMillis();
+        }
+        return transaction.getCreatedAt().getSeconds() * 1000L
+            + (transaction.getCreatedAt().getNanoseconds() / 1_000_000L);
     }
 
     private void goToAuth() {

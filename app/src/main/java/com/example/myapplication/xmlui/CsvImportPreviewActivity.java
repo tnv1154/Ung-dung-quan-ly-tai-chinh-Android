@@ -6,6 +6,8 @@ import android.os.Bundle;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
@@ -16,6 +18,9 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.myapplication.MainActivity;
 import com.example.myapplication.R;
 import com.example.myapplication.finance.data.FirestoreFinanceRepository;
+import com.example.myapplication.finance.model.CsvImportRow;
+import com.example.myapplication.finance.model.TransactionType;
+import com.example.myapplication.finance.model.Wallet;
 import com.example.myapplication.finance.ui.CsvImportSummary;
 import com.example.myapplication.finance.ui.CsvParseResult;
 import com.example.myapplication.finance.ui.FinanceParsersKt;
@@ -25,11 +30,19 @@ import com.example.myapplication.finance.ui.FinanceViewModel;
 import com.example.myapplication.finance.ui.FinanceViewModelFactory;
 import com.example.myapplication.finance.ui.SessionUiState;
 import com.example.myapplication.finance.ui.SessionViewModel;
+import com.google.firebase.Timestamp;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.button.MaterialButton;
 
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+
 public class CsvImportPreviewActivity extends AppCompatActivity {
+    private ActivityResultLauncher<Intent> editRowLauncher;
+
     private SessionViewModel sessionViewModel;
     private FinanceViewModel financeViewModel;
     private String observedUserId;
@@ -38,6 +51,10 @@ public class CsvImportPreviewActivity extends AppCompatActivity {
     private String csvFileName;
     private String rawCsvContent;
     private CsvParseResult parseResult;
+    private final List<CsvImportRow> previewRows = new ArrayList<>();
+    private final List<Wallet> availableWallets = new ArrayList<>();
+    private boolean hasManualEdits;
+    private int editingRowIndex = RecyclerView.NO_POSITION;
 
     private TextView tvFoundCount;
     private TextView tvFileName;
@@ -51,6 +68,7 @@ public class CsvImportPreviewActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_csv_import_preview);
+        setupRowEditorLauncher();
         readIntentData();
         bindViews();
         setupToolbar();
@@ -126,13 +144,41 @@ public class CsvImportPreviewActivity extends AppCompatActivity {
     private void setupList() {
         RecyclerView recyclerView = findViewById(R.id.rvCsvPreviewRows);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        previewAdapter = new CsvImportPreviewAdapter();
+        previewAdapter = new CsvImportPreviewAdapter(this::openEditRow);
         recyclerView.setAdapter(previewAdapter);
     }
 
     private void setupActions() {
         btnCancel.setOnClickListener(v -> finish());
         btnConfirm.setOnClickListener(v -> confirmImport());
+    }
+
+    private void setupRowEditorLauncher() {
+        editRowLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                int targetIndex = editingRowIndex;
+                editingRowIndex = RecyclerView.NO_POSITION;
+                if (targetIndex < 0 || targetIndex >= previewRows.size()) {
+                    return;
+                }
+                if (result.getResultCode() != RESULT_OK || result.getData() == null) {
+                    return;
+                }
+                CsvImportRow oldRow = previewRows.get(targetIndex);
+                CsvImportRow updatedRow = buildEditedRowFromResult(
+                    oldRow == null ? targetIndex + 1 : oldRow.getRowNumber(),
+                    result.getData()
+                );
+                if (updatedRow == null) {
+                    Toast.makeText(this, R.string.csv_import_preview_edit_failed, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                previewRows.set(targetIndex, updatedRow);
+                hasManualEdits = true;
+                renderPreviewRows();
+            }
+        );
     }
 
     private void loadRawCsv() {
@@ -188,27 +234,42 @@ public class CsvImportPreviewActivity extends AppCompatActivity {
             btnConfirm.setEnabled(false);
             return;
         }
-        parseResult = FinanceParsersKt.parseCsvImportRows(rawCsvContent, state.getWallets());
-        previewAdapter.submit(parseResult.getRows());
-        tvFoundCount.setText(getString(R.string.csv_import_preview_found_count, parseResult.getRows().size()));
+        availableWallets.clear();
+        availableWallets.addAll(state.getWallets());
+        if (!hasManualEdits) {
+            parseResult = FinanceParsersKt.parseCsvImportRows(rawCsvContent, availableWallets);
+            previewRows.clear();
+            if (parseResult != null && !parseResult.hasErrorMessage()) {
+                previewRows.addAll(parseResult.getRows());
+            }
+        }
+        renderPreviewRows();
+    }
 
-        if (parseResult.hasErrorMessage()) {
+    private void renderPreviewRows() {
+        previewAdapter.submit(previewRows);
+        tvFoundCount.setText(getString(R.string.csv_import_preview_found_count, previewRows.size()));
+
+        if (parseResult != null && parseResult.hasErrorMessage() && previewRows.isEmpty()) {
             tvPreviewError.setVisibility(android.view.View.VISIBLE);
             tvPreviewError.setText(parseResult.getErrorMessage());
             btnConfirm.setEnabled(false);
             return;
         }
 
-        if (parseResult.getValidRows() <= 0) {
+        int validRows = countValidRows(previewRows);
+        int invalidRows = Math.max(0, previewRows.size() - validRows);
+
+        if (validRows <= 0) {
             tvPreviewError.setVisibility(android.view.View.VISIBLE);
             tvPreviewError.setText(R.string.csv_import_preview_no_valid_rows);
             btnConfirm.setEnabled(false);
             return;
         }
 
-        if (parseResult.getSkippedRows() > 0) {
+        if (invalidRows > 0) {
             tvPreviewError.setVisibility(android.view.View.VISIBLE);
-            tvPreviewError.setText(getString(R.string.csv_import_preview_has_invalid_rows, parseResult.getSkippedRows()));
+            tvPreviewError.setText(getString(R.string.csv_import_preview_has_invalid_rows, invalidRows));
         } else {
             tvPreviewError.setVisibility(android.view.View.GONE);
             tvPreviewError.setText("");
@@ -217,10 +278,10 @@ public class CsvImportPreviewActivity extends AppCompatActivity {
     }
 
     private void confirmImport() {
-        if (financeViewModel == null || parseResult == null || importing) {
+        if (financeViewModel == null || importing) {
             return;
         }
-        java.util.List<com.example.myapplication.finance.model.CsvImportRow> validRows = parseResult.getValidImportRows();
+        List<CsvImportRow> validRows = collectValidRows();
         if (validRows.isEmpty()) {
             Toast.makeText(this, R.string.csv_import_preview_no_valid_rows, Toast.LENGTH_SHORT).show();
             return;
@@ -248,11 +309,187 @@ public class CsvImportPreviewActivity extends AppCompatActivity {
 
         Intent intent = new Intent(this, CsvImportSuccessActivity.class);
         intent.putExtra(CsvImportSuccessActivity.EXTRA_IMPORTED_COUNT, summary.getSuccessCount());
-        intent.putExtra(CsvImportSuccessActivity.EXTRA_SKIPPED_COUNT, summary.getSkippedCount() + parseResult.getSkippedRows());
+        intent.putExtra(
+            CsvImportSuccessActivity.EXTRA_SKIPPED_COUNT,
+            summary.getSkippedCount() + countInvalidRows(previewRows)
+        );
         intent.putExtra(CsvImportSuccessActivity.EXTRA_TOTAL_INCOME, summary.getTotalIncome());
         intent.putExtra(CsvImportSuccessActivity.EXTRA_TOTAL_EXPENSE, summary.getTotalExpense());
         startActivity(intent);
         finish();
+    }
+
+    private void openEditRow(int position, CsvImportRow row) {
+        if (row == null || importing) {
+            return;
+        }
+        Intent intent = new Intent(this, AddTransactionActivity.class);
+        intent.putExtra(AddTransactionActivity.EXTRA_PREVIEW_EDIT_ONLY, true);
+        intent.putExtra(
+            AddTransactionActivity.EXTRA_PREFILL_MODE,
+            row.getType() == TransactionType.INCOME ? AddTransactionActivity.MODE_INCOME : AddTransactionActivity.MODE_EXPENSE
+        );
+        String walletId = resolveWalletId(row);
+        if (walletId != null && !walletId.isBlank()) {
+            intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_SOURCE_WALLET_ID, walletId);
+        }
+        if (row.getAmount() > 0.0) {
+            intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_AMOUNT, row.getAmount());
+        }
+        intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_NOTE, row.getNote());
+        intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_CATEGORY_NAME, row.getCategory());
+        long createdAtMillis = timestampToMillis(row.getTransactionCreatedAt());
+        if (createdAtMillis > 0L) {
+            intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_TIME_MILLIS, createdAtMillis);
+        }
+        editingRowIndex = position;
+        editRowLauncher.launch(intent);
+    }
+
+    private CsvImportRow buildEditedRowFromResult(int rowNumber, Intent data) {
+        if (data == null) {
+            return null;
+        }
+        String mode = data.getStringExtra(AddTransactionActivity.EXTRA_RESULT_MODE);
+        TransactionType type = parsePreviewType(mode);
+        if (type == null) {
+            return new CsvImportRow(
+                rowNumber,
+                null,
+                0.0,
+                Timestamp.now(),
+                "",
+                "",
+                "",
+                "",
+                null,
+                false,
+                getString(R.string.csv_import_preview_edit_type_not_supported)
+            );
+        }
+
+        String walletId = data.getStringExtra(AddTransactionActivity.EXTRA_RESULT_SOURCE_WALLET_ID);
+        Wallet wallet = findWalletById(walletId);
+        double amount = data.getDoubleExtra(AddTransactionActivity.EXTRA_RESULT_AMOUNT, 0.0);
+        String category = safe(data.getStringExtra(AddTransactionActivity.EXTRA_RESULT_CATEGORY_NAME)).trim();
+        if (category.isEmpty()) {
+            category = type == TransactionType.INCOME
+                ? getString(R.string.transaction_type_income)
+                : getString(R.string.default_category_other);
+        }
+        String note = safe(data.getStringExtra(AddTransactionActivity.EXTRA_RESULT_NOTE)).trim();
+        long createdAtMillis = data.getLongExtra(AddTransactionActivity.EXTRA_RESULT_TIME_MILLIS, 0L);
+        Timestamp createdAt = createdAtMillis > 0L ? new Timestamp(new Date(createdAtMillis)) : Timestamp.now();
+
+        String currencyCode = wallet == null ? "" : normalizeCurrency(wallet.getCurrency());
+        String walletName = wallet == null ? "" : safe(wallet.getName()).trim();
+
+        String validationMessage = "";
+        if (amount <= 0.0) {
+            validationMessage = "Số tiền thu/chi không hợp lệ";
+        } else if (wallet == null) {
+            validationMessage = "Không tìm thấy tài khoản tương ứng";
+        } else if (walletName.isEmpty()) {
+            validationMessage = "Thiếu tài khoản";
+        } else if (currencyCode.isEmpty()) {
+            validationMessage = "Thiếu loại tiền tệ";
+        }
+
+        return new CsvImportRow(
+            rowNumber,
+            type,
+            amount,
+            createdAt,
+            currencyCode,
+            category,
+            note,
+            walletName,
+            wallet == null ? null : wallet.getId(),
+            validationMessage.isEmpty(),
+            validationMessage
+        );
+    }
+
+    private TransactionType parsePreviewType(String mode) {
+        if (AddTransactionActivity.MODE_INCOME.equalsIgnoreCase(mode)) {
+            return TransactionType.INCOME;
+        }
+        if (AddTransactionActivity.MODE_EXPENSE.equalsIgnoreCase(mode)) {
+            return TransactionType.EXPENSE;
+        }
+        return null;
+    }
+
+    private Wallet findWalletById(String walletId) {
+        if (walletId == null || walletId.isBlank()) {
+            return null;
+        }
+        for (Wallet wallet : availableWallets) {
+            if (walletId.equals(wallet.getId())) {
+                return wallet;
+            }
+        }
+        return null;
+    }
+
+    private String resolveWalletId(CsvImportRow row) {
+        if (row == null) {
+            return null;
+        }
+        if (row.getWalletId() != null && !row.getWalletId().isBlank()) {
+            return row.getWalletId();
+        }
+        String walletName = safe(row.getWalletName()).trim();
+        if (walletName.isEmpty()) {
+            return null;
+        }
+        for (Wallet wallet : availableWallets) {
+            if (walletName.equalsIgnoreCase(safe(wallet.getName()).trim())) {
+                return wallet.getId();
+            }
+        }
+        return null;
+    }
+
+    private List<CsvImportRow> collectValidRows() {
+        List<CsvImportRow> rows = new ArrayList<>();
+        for (CsvImportRow row : previewRows) {
+            if (row != null && row.isValid()) {
+                rows.add(row);
+            }
+        }
+        return rows;
+    }
+
+    private int countValidRows(List<CsvImportRow> rows) {
+        int count = 0;
+        for (CsvImportRow row : rows) {
+            if (row != null && row.isValid()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private int countInvalidRows(List<CsvImportRow> rows) {
+        int valid = countValidRows(rows);
+        return Math.max(0, rows.size() - valid);
+    }
+
+    private long timestampToMillis(Timestamp timestamp) {
+        if (timestamp == null) {
+            return 0L;
+        }
+        return timestamp.getSeconds() * 1000L + (timestamp.getNanoseconds() / 1_000_000L);
+    }
+
+    private String normalizeCurrency(String raw) {
+        String value = safe(raw).trim().toUpperCase(Locale.ROOT);
+        return value;
+    }
+
+    private String safe(String raw) {
+        return raw == null ? "" : raw;
     }
 
     private void goToAuth() {

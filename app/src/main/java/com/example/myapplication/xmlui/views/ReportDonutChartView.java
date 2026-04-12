@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.util.AttributeSet;
+import android.view.MotionEvent;
 import android.view.View;
 
 import androidx.annotation.Nullable;
@@ -23,6 +24,12 @@ public class ReportDonutChartView extends View {
 
     private final List<Float> values = new ArrayList<>();
     private final List<Integer> colors = new ArrayList<>();
+    @Nullable
+    private OnSegmentClickListener onSegmentClickListener;
+
+    public interface OnSegmentClickListener {
+        void onSegmentClick(int index, float value);
+    }
 
     public ReportDonutChartView(Context context) {
         super(context);
@@ -63,17 +70,22 @@ public class ReportDonutChartView extends View {
         values.clear();
         colors.clear();
         if (segmentValues != null) {
-            for (Float value : segmentValues) {
+            for (int i = 0; i < segmentValues.size(); i++) {
+                Float value = segmentValues.get(i);
                 if (value == null || value <= 0f) {
                     continue;
                 }
                 values.add(value);
+                if (segmentColors != null && !segmentColors.isEmpty()) {
+                    colors.add(segmentColors.get(i % segmentColors.size()));
+                }
             }
         }
-        if (segmentColors != null) {
-            colors.addAll(segmentColors);
-        }
         invalidate();
+    }
+
+    public void setOnSegmentClickListener(@Nullable OnSegmentClickListener listener) {
+        this.onSegmentClickListener = listener;
     }
 
     @Override
@@ -121,6 +133,85 @@ public class ReportDonutChartView extends View {
             segmentPaint.setColor(color);
             canvas.drawArc(arcBounds, startAngle, sweep - gap, false, segmentPaint);
             startAngle += sweep;
+        }
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (onSegmentClickListener == null || values.isEmpty()) {
+            return super.onTouchEvent(event);
+        }
+        if (event.getAction() != MotionEvent.ACTION_UP) {
+            return true;
+        }
+        ChartGeometry geometry = resolveGeometry();
+        if (geometry == null) {
+            return true;
+        }
+        float dx = event.getX() - geometry.centerX;
+        float dy = event.getY() - geometry.centerY;
+        float distance = (float) Math.sqrt(dx * dx + dy * dy);
+        if (distance < geometry.innerRadius || distance > geometry.outerRadius) {
+            return true;
+        }
+
+        float total = 0f;
+        for (Float value : values) {
+            total += value;
+        }
+        if (total <= 0f) {
+            return true;
+        }
+
+        float angle = (float) ((Math.toDegrees(Math.atan2(dy, dx)) + 450f) % 360f);
+        float start = 0f;
+        float gap = values.size() > 1 ? 2f : 0f;
+        for (int i = 0; i < values.size(); i++) {
+            float sweep = (values.get(i) / total) * 360f;
+            float visibleSweep = Math.max(0f, sweep - gap);
+            if (visibleSweep > 0f && angle >= start && angle < start + visibleSweep) {
+                onSegmentClickListener.onSegmentClick(i, values.get(i));
+                performClick();
+                return true;
+            }
+            start += sweep;
+        }
+        return true;
+    }
+
+    @Override
+    public boolean performClick() {
+        super.performClick();
+        return true;
+    }
+
+    @Nullable
+    private ChartGeometry resolveGeometry() {
+        float width = getWidth() - getPaddingLeft() - getPaddingRight();
+        float height = getHeight() - getPaddingTop() - getPaddingBottom();
+        float diameter = Math.min(width, height);
+        if (diameter <= 0f) {
+            return null;
+        }
+        float stroke = Math.max(8f, diameter * 0.18f);
+        float outerRadius = diameter / 2f;
+        float innerRadius = outerRadius - stroke;
+        float centerX = getPaddingLeft() + width / 2f;
+        float centerY = getPaddingTop() + height / 2f;
+        return new ChartGeometry(centerX, centerY, innerRadius, outerRadius);
+    }
+
+    private static final class ChartGeometry {
+        private final float centerX;
+        private final float centerY;
+        private final float innerRadius;
+        private final float outerRadius;
+
+        private ChartGeometry(float centerX, float centerY, float innerRadius, float outerRadius) {
+            this.centerX = centerX;
+            this.centerY = centerY;
+            this.innerRadius = innerRadius;
+            this.outerRadius = outerRadius;
         }
     }
 }

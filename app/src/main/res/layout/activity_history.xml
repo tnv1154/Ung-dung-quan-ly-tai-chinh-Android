@@ -10,7 +10,7 @@
         android:id="@+id/toolbarHistory"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="@dimen/screen_top_safe_margin"
         android:background="@android:color/transparent"
         android:title="@string/app_title_history"
         app:navigationIcon="@drawable/ic_wallet_back"
@@ -53,57 +53,31 @@
                     android:inputType="text" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <HorizontalScrollView
-                android:layout_width="match_parent"
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnHistoryFilterPicker"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:scrollbars="none">
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnHistoryAll"
-                        style="?attr/materialButtonOutlinedStyle"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/label_filter_all" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnHistoryDay"
-                        style="?attr/materialButtonOutlinedStyle"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:text="@string/label_period_day" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnHistoryWeek"
-                        style="?attr/materialButtonOutlinedStyle"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:text="@string/label_period_week" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnHistoryMonth"
-                        style="?attr/materialButtonOutlinedStyle"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:text="@string/label_period_month" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnHistoryQuarter"
-                        style="?attr/materialButtonOutlinedStyle"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:text="@string/label_period_quarter" />
-                </LinearLayout>
-            </HorizontalScrollView>
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="12dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minHeight="0dp"
+                android:paddingStart="14dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="6dp"
+                android:text="@string/history_filter_month_this"
+                android:textAllCaps="false"
+                android:textColor="@color/blue_primary"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                app:icon="@drawable/ic_wallet_chevron_right"
+                app:iconGravity="textEnd"
+                app:iconPadding="8dp"
+                app:iconTint="@color/blue_primary"
+                app:strokeColor="@android:color/transparent"
+                app:strokeWidth="0dp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -137,6 +111,13 @@
                         android:textSize="15sp"
                         android:textStyle="bold" />
                 </LinearLayout>
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@color/divider" />
 
                 <LinearLayout
                     android:layout_width="0dp"

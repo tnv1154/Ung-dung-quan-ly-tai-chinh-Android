@@ -7,10 +7,11 @@
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/layoutCurrencyConverterTopBar"
         android:layout_width="0dp"
-        android:layout_height="64dp"
-        android:layout_marginTop="@dimen/screen_top_safe_margin"
+        android:layout_height="wrap_content"
+        android:minHeight="64dp"
         android:background="@color/card_bg"
         android:paddingStart="12dp"
+        android:paddingTop="@dimen/screen_top_safe_margin"
         android:paddingEnd="12dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"

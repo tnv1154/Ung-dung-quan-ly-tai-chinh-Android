@@ -102,11 +102,12 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
+                        android:ellipsize="end"
                         android:includeFontPadding="true"
                         android:maxLines="1"
                         android:text="@string/default_money"
                         android:textColor="@android:color/white"
-                        android:textSize="42sp"
+                        android:textSize="34sp"
                         android:textStyle="bold" />
 
                     <TextView
@@ -130,14 +131,65 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
                     android:background="@drawable/bg_overview_trend_chip"
+                    android:ellipsize="end"
+                    android:maxLines="1"
                     android:paddingStart="14dp"
                     android:paddingTop="8dp"
                     android:paddingEnd="14dp"
                     android:paddingBottom="8dp"
-                    android:text="@string/overview_balance_trend"
+                    android:text="@string/overview_balance_trend_month"
                     android:textColor="@android:color/white"
                     android:textSize="16sp"
                     tools:text="↪ +12% so với tháng trước" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_report_preview"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:padding="3dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnOverviewScopeWeek"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="30dp"
+                    android:layout_weight="1"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:minHeight="0dp"
+                    android:text="@string/label_period_week"
+                    android:textAllCaps="false"
+                    android:textSize="13sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnOverviewScopeMonth"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="30dp"
+                    android:layout_weight="1"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:minHeight="0dp"
+                    android:text="@string/label_period_month"
+                    android:textAllCaps="false"
+                    android:textSize="13sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnOverviewScopeQuarter"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="30dp"
+                    android:layout_weight="1"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:minHeight="0dp"
+                    android:text="@string/label_period_quarter"
+                    android:textAllCaps="false"
+                    android:textSize="13sp" />
             </LinearLayout>
 
             <LinearLayout
@@ -170,6 +222,7 @@
                         android:textStyle="bold" />
 
                     <TextView
+                        android:id="@+id/tvOverviewIncomeLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
@@ -179,14 +232,15 @@
 
                     <TextView
                         android:id="@+id/tvOverviewIncome"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
+                        android:ellipsize="end"
                         android:includeFontPadding="true"
                         android:maxLines="1"
                         android:text="@string/default_money"
                         android:textColor="@color/text_primary"
-                        android:textSize="34sp"
+                        android:textSize="26sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
@@ -213,6 +267,7 @@
                         android:textStyle="bold" />
 
                     <TextView
+                        android:id="@+id/tvOverviewExpenseLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
@@ -222,14 +277,15 @@
 
                     <TextView
                         android:id="@+id/tvOverviewExpense"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
+                        android:ellipsize="end"
                         android:includeFontPadding="true"
                         android:maxLines="1"
                         android:text="@string/default_money"
                         android:textColor="@color/text_primary"
-                        android:textSize="34sp"
+                        android:textSize="26sp"
                         android:textStyle="bold" />
                 </LinearLayout>
             </LinearLayout>
@@ -284,6 +340,8 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
+                            android:ellipsize="end"
+                            android:maxLines="1"
                             android:textColor="@color/overview_greeting_text"
                             android:textSize="14sp"
                             tools:text="Đã dùng 2.500.000 đ / 5.000.000 đ" />
@@ -311,6 +369,8 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
+                        android:ellipsize="end"
+                        android:maxLines="1"
                         android:text="@string/overview_budget_used"
                         android:textColor="@color/overview_greeting_text"
                         android:textSize="14sp"
@@ -381,9 +441,11 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
                     android:text="@string/overview_recent_title"
                     android:textColor="@color/text_primary"
-                    android:textSize="32sp"
+                    android:textSize="24sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -392,70 +454,18 @@
                     android:layout_height="wrap_content"
                     android:text="@string/overview_action_view_all"
                     android:textColor="@color/bottom_nav_selected"
-                    android:textSize="18sp"
+                    android:textSize="14sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <LinearLayout
-                android:id="@+id/cardOverviewRecent"
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvOverviewRecentTransactions"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:background="@drawable/bg_overview_card"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingStart="16dp"
-                android:paddingTop="14dp"
-                android:paddingEnd="16dp"
-                android:paddingBottom="14dp"
-                tools:visibility="visible">
-
-                <ImageView
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:background="@drawable/bg_overview_icon_recent"
-                    android:contentDescription="@null"
-                    android:padding="10dp"
-                    android:src="@drawable/ic_overview_bag"
-                    app:tint="@color/overview_icon_recent_tint" />
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:id="@+id/tvOverviewRecentName"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:textColor="@color/text_primary"
-                        android:textSize="15sp"
-                        android:textStyle="bold"
-                        tools:text="Siêu thị VinMart" />
-
-                    <TextView
-                        android:id="@+id/tvOverviewRecentTime"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:textColor="@color/overview_greeting_text"
-                        android:textSize="14sp"
-                        tools:text="Hôm nay, 10:30" />
-                </LinearLayout>
-
-                <TextView
-                    android:id="@+id/tvOverviewRecentAmount"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="@color/text_primary"
-                    android:textSize="32sp"
-                    android:textStyle="bold"
-                    tools:text="-450.000 đ" />
-            </LinearLayout>
+                android:nestedScrollingEnabled="false"
+                tools:itemCount="3"
+                tools:listitem="@layout/item_transaction_row" />
 
             <TextView
                 android:id="@+id/tvOverviewNoTransactions"

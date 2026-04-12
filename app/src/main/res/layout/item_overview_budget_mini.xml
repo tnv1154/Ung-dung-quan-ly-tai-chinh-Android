@@ -26,6 +26,8 @@
         android:id="@+id/tvOverviewBudgetMiniMeta"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
         android:textColor="@color/text_secondary"
         android:textSize="13sp" />
 

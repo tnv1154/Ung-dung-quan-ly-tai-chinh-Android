@@ -15,12 +15,8 @@ import com.google.firebase.Timestamp;
 import com.google.firebase.firestore.Source;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -500,6 +496,111 @@ public class FinanceViewModel extends ViewModel {
         });
     }
 
+    public void updateTransaction(
+        String transactionId,
+        String walletId,
+        TransactionType type,
+        double amount,
+        String category,
+        String note,
+        String toWalletId,
+        Timestamp transactionCreatedAt,
+        Consumer<String> onComplete
+    ) {
+        ioExecutor.submit(() -> {
+            String errorMessage = null;
+            try {
+                repository.updateTransaction(
+                    userId,
+                    transactionId,
+                    walletId,
+                    toWalletId,
+                    type,
+                    amount,
+                    amount,
+                    "",
+                    "",
+                    null,
+                    null,
+                    category,
+                    note,
+                    transactionCreatedAt
+                );
+                refreshFromCacheOnly();
+            } catch (Exception error) {
+                errorMessage = messageOrDefault(error, "Không thể cập nhật giao dịch");
+                postError("Không thể cập nhật giao dịch", error);
+            }
+            if (onComplete != null) {
+                onComplete.accept(errorMessage);
+            }
+        });
+    }
+
+    public void updateTransferTransactionWithConversion(
+        String transactionId,
+        String sourceWalletId,
+        String destinationWalletId,
+        double sourceAmount,
+        String category,
+        String note,
+        String sourceCurrency,
+        String destinationCurrency,
+        Timestamp transactionCreatedAt,
+        Consumer<String> onComplete
+    ) {
+        ioExecutor.submit(() -> {
+            String errorMessage = null;
+            try {
+                String sourceCode = normalizeCurrencyCode(sourceCurrency);
+                String destinationCode = normalizeCurrencyCode(destinationCurrency);
+                double destinationAmount = sourceAmount;
+                Double exchangeRate = null;
+                Timestamp exchangeRateFetchedAt = null;
+
+                if (!sourceCode.equals(destinationCode)) {
+                    ExchangeRateSnapshot snapshot = ExchangeRateSnapshotLoader.loadWithFallback(repository, userId);
+                    if (snapshot == null) {
+                        throw new IllegalStateException("Chưa có dữ liệu tỷ giá. Vui lòng chờ đồng bộ.");
+                    }
+                    exchangeRate = snapshot.conversionRate(sourceCode, destinationCode);
+                    if (exchangeRate == null || exchangeRate <= 0.0) {
+                        throw new IllegalStateException("Chưa có tỷ giá cho cặp " + sourceCode + "/" + destinationCode);
+                    }
+                    destinationAmount = roundCurrencyAmount(sourceAmount * exchangeRate);
+                    if (destinationAmount <= 0.0) {
+                        throw new IllegalStateException("Không thể quy đổi số tiền chuyển khoản.");
+                    }
+                    exchangeRateFetchedAt = snapshot.getFetchedAt();
+                }
+
+                repository.updateTransaction(
+                    userId,
+                    transactionId,
+                    sourceWalletId,
+                    destinationWalletId,
+                    TransactionType.TRANSFER,
+                    sourceAmount,
+                    destinationAmount,
+                    sourceCode,
+                    destinationCode,
+                    exchangeRate,
+                    exchangeRateFetchedAt,
+                    category,
+                    note,
+                    transactionCreatedAt
+                );
+                refreshFromCacheOnly();
+            } catch (Exception error) {
+                errorMessage = messageOrDefault(error, "Không thể cập nhật giao dịch");
+                postError("Không thể cập nhật giao dịch", error);
+            }
+            if (onComplete != null) {
+                onComplete.accept(errorMessage);
+            }
+        });
+    }
+
     public void deleteTransaction(String transactionId) {
         ioExecutor.submit(() -> {
             try {
@@ -867,53 +968,6 @@ public class FinanceViewModel extends ViewModel {
                 onComplete.accept(errorMessage);
             }
         });
-    }
-
-    public String buildCsvExport(ExportPeriod period, Set<String> selectedWalletIds) {
-        FinanceUiState state = currentState();
-        Map<String, Wallet> walletMap = new HashMap<>();
-        for (Wallet wallet : state.getWallets()) {
-            walletMap.put(wallet.getId(), wallet);
-        }
-
-        Set<String> walletIds = selectedWalletIds == null ? new LinkedHashSet<>() : selectedWalletIds;
-        List<FinanceTransaction> filtered = FinanceUiCalculatorsKt.filterTransactionsForExport(state.getTransactions(), period);
-        List<FinanceTransaction> exportItems = new ArrayList<>();
-        for (FinanceTransaction tx : filtered) {
-            if (walletIds.isEmpty() || walletIds.contains(tx.getWalletId())) {
-                exportItems.add(tx);
-            }
-        }
-
-        List<String> lines = new ArrayList<>();
-        lines.add("id,type,amount,category,note,wallet,toWallet,createdAt");
-        for (FinanceTransaction tx : exportItems) {
-            String source = walletMap.containsKey(tx.getWalletId()) ? walletMap.get(tx.getWalletId()).getName() : "";
-            String target = "";
-            if (tx.getToWalletId() != null && walletMap.containsKey(tx.getToWalletId())) {
-                target = walletMap.get(tx.getToWalletId()).getName();
-            }
-            String note = tx.getNote().replace(",", " ");
-            String category = tx.getCategory().replace(",", " ");
-            lines.add(
-                tx.getId()
-                    + ","
-                    + tx.getType().name()
-                    + ","
-                    + tx.getAmount()
-                    + ","
-                    + category
-                    + ","
-                    + note
-                    + ","
-                    + source
-                    + ","
-                    + target
-                    + ","
-                    + tx.getCreatedAt().getSeconds()
-            );
-        }
-        return String.join("\n", lines);
     }
 
     @Override

@@ -53,10 +53,22 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class AddTransactionActivity extends AppCompatActivity {
-    private static final double BALANCE_EPSILON = 0.000001d;
-
     public static final String EXTRA_PREFILL_MODE = "extra_prefill_mode";
     public static final String EXTRA_PREFILL_SOURCE_WALLET_ID = "extra_prefill_source_wallet_id";
+    public static final String EXTRA_PREFILL_DESTINATION_WALLET_ID = "extra_prefill_destination_wallet_id";
+    public static final String EXTRA_PREFILL_AMOUNT = "extra_prefill_amount";
+    public static final String EXTRA_PREFILL_NOTE = "extra_prefill_note";
+    public static final String EXTRA_PREFILL_CATEGORY_NAME = "extra_prefill_category_name";
+    public static final String EXTRA_PREFILL_TIME_MILLIS = "extra_prefill_time_millis";
+    public static final String EXTRA_EDIT_TRANSACTION_ID = "extra_edit_transaction_id";
+    public static final String EXTRA_PREVIEW_EDIT_ONLY = "extra_preview_edit_only";
+    public static final String EXTRA_RESULT_MODE = "extra_result_mode";
+    public static final String EXTRA_RESULT_SOURCE_WALLET_ID = "extra_result_source_wallet_id";
+    public static final String EXTRA_RESULT_DESTINATION_WALLET_ID = "extra_result_destination_wallet_id";
+    public static final String EXTRA_RESULT_AMOUNT = "extra_result_amount";
+    public static final String EXTRA_RESULT_NOTE = "extra_result_note";
+    public static final String EXTRA_RESULT_CATEGORY_NAME = "extra_result_category_name";
+    public static final String EXTRA_RESULT_TIME_MILLIS = "extra_result_time_millis";
     public static final String MODE_EXPENSE = "EXPENSE";
     public static final String MODE_INCOME = "INCOME";
     public static final String MODE_TRANSFER = "TRANSFER";
@@ -91,9 +103,18 @@ public class AddTransactionActivity extends AppCompatActivity {
     private String selectedCategoryId;
     private String selectedCategoryName;
     private String prefillSourceWalletId;
+    private String prefillDestinationWalletId;
+    private Double prefillAmount;
+    private String prefillNote;
+    private String prefillCategoryName;
+    private long prefillTimeMillis;
     private long selectedDateTimeMillis;
+    private String editingTransactionId;
+    private boolean previewEditOnly;
 
+    private ImageButton btnBack;
     private MaterialButton btnModeSelector;
+    private MaterialButton btnDelete;
     private MaterialButton btnSave;
     private LinearLayout layoutCategorySection;
     private LinearLayout layoutQuickCategorySection;
@@ -126,9 +147,11 @@ public class AddTransactionActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_add_transaction);
         bindViews();
-        applyIntentPrefill();
         selectedDateTimeMillis = System.currentTimeMillis();
+        applyIntentPrefill();
         setupActions();
+        applyInputPrefill();
+        applyEditModeUi();
         setupBottomNavigation();
         setupSession();
         refreshModeUi();
@@ -136,7 +159,9 @@ public class AddTransactionActivity extends AppCompatActivity {
     }
 
     private void bindViews() {
+        btnBack = findViewById(R.id.btnAddBack);
         btnModeSelector = findViewById(R.id.btnModeSelector);
+        btnDelete = findViewById(R.id.btnDeleteTransaction);
         btnSave = findViewById(R.id.btnSaveTransaction);
         layoutCategorySection = findViewById(R.id.layoutCategorySection);
         layoutQuickCategorySection = findViewById(R.id.layoutQuickCategorySection);
@@ -166,7 +191,6 @@ public class AddTransactionActivity extends AppCompatActivity {
     }
 
     private void setupActions() {
-        ImageButton btnHistory = findViewById(R.id.btnAddBack);
         ImageButton btnTopSave = findViewById(R.id.btnTopSaveTransaction);
         View rowCategorySelector = findViewById(R.id.rowCategorySelector);
         View rowSourceWallet = findViewById(R.id.rowSourceWallet);
@@ -175,16 +199,22 @@ public class AddTransactionActivity extends AppCompatActivity {
         ImageButton btnSwapTransferWallets = findViewById(R.id.btnSwapTransferWallets);
         View rowDateTime = findViewById(R.id.rowTransactionDateTime);
 
-        btnHistory.setOnClickListener(v -> {
+        btnBack.setOnClickListener(v -> {
+            if (isEditMode() || previewEditOnly) {
+                setResult(RESULT_CANCELED);
+                finish();
+                return;
+            }
             Intent historyIntent = new Intent(this, HistoryActivity.class);
             historyIntent.putExtra(HistoryActivity.EXTRA_SOURCE_NAV_ITEM_ID, R.id.nav_add);
             startActivity(historyIntent);
         });
         btnTopSave.setOnClickListener(v -> submitTransaction());
+        btnDelete.setOnClickListener(v -> confirmDeleteTransaction());
         btnSave.setOnClickListener(v -> submitTransaction());
         btnModeSelector.setOnClickListener(v -> showModeSelector());
         MoneyInputFormatter.attach(etAmount);
-        MoneyInputFormatter.attach(etActualBalance);
+        MoneyInputFormatter.attachSigned(etActualBalance);
         rowCategorySelector.setOnClickListener(v -> openCategoryPicker());
         tvCategoryAll.setOnClickListener(v -> openCategoryPicker());
         btnManageCategories.setOnClickListener(v -> openCategoryEditor());
@@ -280,6 +310,12 @@ public class AddTransactionActivity extends AppCompatActivity {
                 prefillSourceWalletId = null;
             }
         }
+        if (selectedDestinationWallet == null && prefillDestinationWalletId != null) {
+            selectedDestinationWallet = findWalletById(prefillDestinationWalletId);
+            if (selectedDestinationWallet != null) {
+                prefillDestinationWalletId = null;
+            }
+        }
         if (selectedSourceWallet == null && !wallets.isEmpty()) {
             selectedSourceWallet = wallets.get(0);
         }
@@ -301,7 +337,6 @@ public class AddTransactionActivity extends AppCompatActivity {
                 selectedCategoryName = null;
             }
         }
-        ensureDefaultCategorySelection();
         renderQuickCategories();
         updateSelectionButtons();
 
@@ -317,6 +352,32 @@ public class AddTransactionActivity extends AppCompatActivity {
             return;
         }
         prefillSourceWalletId = intent.getStringExtra(EXTRA_PREFILL_SOURCE_WALLET_ID);
+        prefillDestinationWalletId = intent.getStringExtra(EXTRA_PREFILL_DESTINATION_WALLET_ID);
+        String editId = intent.getStringExtra(EXTRA_EDIT_TRANSACTION_ID);
+        if (editId != null && !editId.trim().isEmpty()) {
+            editingTransactionId = editId.trim();
+        }
+        previewEditOnly = intent.getBooleanExtra(EXTRA_PREVIEW_EDIT_ONLY, false);
+        if (intent.hasExtra(EXTRA_PREFILL_AMOUNT)) {
+            double amount = intent.getDoubleExtra(EXTRA_PREFILL_AMOUNT, 0.0);
+            if (amount > 0.0) {
+                prefillAmount = amount;
+            }
+        }
+        String note = intent.getStringExtra(EXTRA_PREFILL_NOTE);
+        if (note != null && !note.trim().isEmpty()) {
+            prefillNote = note.trim();
+        }
+        String category = intent.getStringExtra(EXTRA_PREFILL_CATEGORY_NAME);
+        if (category != null && !category.trim().isEmpty()) {
+            prefillCategoryName = category.trim();
+            selectedCategoryName = prefillCategoryName;
+        }
+        long prefTime = intent.getLongExtra(EXTRA_PREFILL_TIME_MILLIS, 0L);
+        if (prefTime > 0L) {
+            prefillTimeMillis = prefTime;
+            selectedDateTimeMillis = prefTime;
+        }
         String prefillMode = intent.getStringExtra(EXTRA_PREFILL_MODE);
         if (MODE_INCOME.equalsIgnoreCase(prefillMode)) {
             selectedMode = Mode.INCOME;
@@ -327,6 +388,45 @@ public class AddTransactionActivity extends AppCompatActivity {
         } else {
             selectedMode = Mode.EXPENSE;
         }
+    }
+
+    private void applyInputPrefill() {
+        if (prefillAmount != null && prefillAmount > 0.0) {
+            String value = Math.floor(prefillAmount) == prefillAmount
+                ? String.format(Locale.ROOT, "%.0f", prefillAmount)
+                : String.format(Locale.ROOT, "%.2f", prefillAmount);
+            etAmount.setText(value);
+        }
+        if (prefillNote != null && !prefillNote.isEmpty()) {
+            etNote.setText(prefillNote);
+        }
+        if (prefillCategoryName != null && !prefillCategoryName.isEmpty()) {
+            selectedCategoryName = prefillCategoryName;
+        }
+        if (prefillTimeMillis > 0L) {
+            selectedDateTimeMillis = prefillTimeMillis;
+        }
+    }
+
+    private void applyEditModeUi() {
+        if (!isEditMode() && !previewEditOnly) {
+            btnDelete.setVisibility(View.GONE);
+            return;
+        }
+        btnBack.setImageResource(R.drawable.ic_wallet_back);
+        btnBack.setContentDescription(getString(R.string.action_back));
+        btnDelete.setVisibility(isEditMode() ? View.VISIBLE : View.GONE);
+        btnSave.setText(R.string.action_save_changes);
+        if (previewEditOnly && rowModeTransfer != null) {
+            rowModeTransfer.setVisibility(View.GONE);
+            if (selectedMode == Mode.TRANSFER || selectedMode == Mode.ADJUST) {
+                selectedMode = Mode.EXPENSE;
+            }
+        }
+    }
+
+    private boolean isEditMode() {
+        return editingTransactionId != null && !editingTransactionId.isBlank();
     }
 
     private void refreshModeUi() {
@@ -353,7 +453,6 @@ public class AddTransactionActivity extends AppCompatActivity {
         etAmount.setHintTextColor(getColor(amountColor));
 
         styleModeSelector(transfer);
-        ensureDefaultCategorySelection();
         renderQuickCategories();
         updateSelectionButtons();
         updateCurrencyHints();
@@ -452,39 +551,6 @@ public class AddTransactionActivity extends AppCompatActivity {
                 modeOverlayCard.setTranslationY(0f);
             })
             .start();
-    }
-
-    private void ensureDefaultCategorySelection() {
-        if (selectedMode != Mode.EXPENSE && selectedMode != Mode.INCOME) {
-            return;
-        }
-        if (selectedCategoryName != null && !selectedCategoryName.trim().isEmpty()) {
-            return;
-        }
-        TransactionType type = selectedMode == Mode.INCOME ? TransactionType.INCOME : TransactionType.EXPENSE;
-        TransactionCategory fallback = null;
-        for (TransactionCategory category : categories) {
-            if (category.getType() != type) {
-                continue;
-            }
-            if (type == TransactionType.EXPENSE && (category.getParentName() == null || category.getParentName().trim().isEmpty())) {
-                continue;
-            }
-            fallback = category;
-            break;
-        }
-        if (fallback == null) {
-            for (TransactionCategory category : categories) {
-                if (category.getType() == type) {
-                    fallback = category;
-                    break;
-                }
-            }
-        }
-        if (fallback != null) {
-            selectedCategoryId = fallback.getId();
-            selectedCategoryName = fallback.getName();
-        }
     }
 
     private void renderQuickCategories() {
@@ -826,8 +892,15 @@ public class AddTransactionActivity extends AppCompatActivity {
         String note = etNote.getText() == null ? "" : etNote.getText().toString().trim();
         Timestamp selectedTimestamp = new Timestamp(new Date(selectedDateTimeMillis));
         if (selectedMode == Mode.ADJUST) {
-            Double actual = parseDouble(etActualBalance.getText() == null ? "" : etActualBalance.getText().toString());
-            if (actual == null || actual < 0.0) {
+            if (previewEditOnly) {
+                showError(getString(R.string.csv_import_preview_edit_type_not_supported));
+                return;
+            }
+            Double actual = parseDouble(
+                etActualBalance.getText() == null ? "" : etActualBalance.getText().toString(),
+                true
+            );
+            if (actual == null) {
                 showError(getString(R.string.error_invalid_amount));
                 return;
             }
@@ -842,7 +915,10 @@ public class AddTransactionActivity extends AppCompatActivity {
             return;
         }
 
-        Double amount = parseDouble(etAmount.getText() == null ? "" : etAmount.getText().toString());
+        Double amount = parseDouble(
+            etAmount.getText() == null ? "" : etAmount.getText().toString(),
+            false
+        );
         if (amount == null || amount <= 0.0) {
             showError(getString(R.string.error_invalid_amount));
             return;
@@ -866,13 +942,47 @@ public class AddTransactionActivity extends AppCompatActivity {
                 ? getString(R.string.default_category_other)
                 : selectedCategoryName;
         }
-        if ((type == TransactionType.EXPENSE || type == TransactionType.TRANSFER)
-            && isAmountGreaterThanBalance(amount, selectedSourceWallet.getBalance())) {
-            showError(getString(R.string.error_insufficient_balance));
+        pendingSubmit = true;
+        if (previewEditOnly) {
+            completePreviewEdit(
+                amount,
+                category,
+                note,
+                selectedTimestamp,
+                selectedSourceWallet.getId(),
+                destinationWalletId
+            );
             return;
         }
-
-        pendingSubmit = true;
+        if (isEditMode()) {
+            if (type == TransactionType.TRANSFER) {
+                financeViewModel.updateTransferTransactionWithConversion(
+                    editingTransactionId,
+                    selectedSourceWallet.getId(),
+                    destinationWalletId,
+                    amount,
+                    category,
+                    note,
+                    selectedSourceWallet.getCurrency(),
+                    selectedDestinationWallet == null ? null : selectedDestinationWallet.getCurrency(),
+                    selectedTimestamp,
+                    this::onSubmitCompleted
+                );
+            } else {
+                financeViewModel.updateTransaction(
+                    editingTransactionId,
+                    selectedSourceWallet.getId(),
+                    type,
+                    amount,
+                    category,
+                    note,
+                    destinationWalletId,
+                    selectedTimestamp,
+                    this::onSubmitCompleted
+                );
+            }
+            return;
+        }
         if (type == TransactionType.TRANSFER) {
             financeViewModel.addTransferTransactionWithConversion(
                 selectedSourceWallet.getId(),
@@ -899,9 +1009,48 @@ public class AddTransactionActivity extends AppCompatActivity {
         }
     }
 
-    private Double parseDouble(String raw) {
-        String cleaned = MoneyInputFormatter.normalizeAmount(raw);
-        if (cleaned.isEmpty()) {
+    private void completePreviewEdit(
+        double amount,
+        String category,
+        String note,
+        Timestamp createdAt,
+        String sourceWalletId,
+        String destinationWalletId
+    ) {
+        pendingSubmit = false;
+        Intent result = new Intent();
+        result.putExtra(EXTRA_RESULT_MODE, modeValue(selectedMode));
+        result.putExtra(EXTRA_RESULT_SOURCE_WALLET_ID, sourceWalletId);
+        result.putExtra(EXTRA_RESULT_DESTINATION_WALLET_ID, destinationWalletId);
+        result.putExtra(EXTRA_RESULT_AMOUNT, amount);
+        result.putExtra(EXTRA_RESULT_NOTE, note);
+        result.putExtra(EXTRA_RESULT_CATEGORY_NAME, category);
+        result.putExtra(
+            EXTRA_RESULT_TIME_MILLIS,
+            createdAt == null ? selectedDateTimeMillis : createdAt.getSeconds() * 1000L + (createdAt.getNanoseconds() / 1_000_000L)
+        );
+        setResult(RESULT_OK, result);
+        finish();
+    }
+
+    private String modeValue(Mode mode) {
+        if (mode == Mode.INCOME) {
+            return MODE_INCOME;
+        }
+        if (mode == Mode.TRANSFER) {
+            return MODE_TRANSFER;
+        }
+        if (mode == Mode.ADJUST) {
+            return MODE_ADJUST;
+        }
+        return MODE_EXPENSE;
+    }
+
+    private Double parseDouble(String raw, boolean allowSigned) {
+        String cleaned = allowSigned
+            ? MoneyInputFormatter.normalizeSignedAmount(raw)
+            : MoneyInputFormatter.normalizeAmount(raw);
+        if (cleaned.isEmpty() || "-".equals(cleaned)) {
             return null;
         }
         try {
@@ -909,10 +1058,6 @@ public class AddTransactionActivity extends AppCompatActivity {
         } catch (NumberFormatException ex) {
             return null;
         }
-    }
-
-    private boolean isAmountGreaterThanBalance(double amount, double balance) {
-        return amount - balance > BALANCE_EPSILON;
     }
 
     private String buildWalletOptionLabel(Wallet wallet) {
@@ -1002,6 +1147,22 @@ public class AddTransactionActivity extends AppCompatActivity {
         tvError.setVisibility(View.VISIBLE);
     }
 
+    private void confirmDeleteTransaction() {
+        if (!isEditMode() || financeViewModel == null || pendingSubmit) {
+            return;
+        }
+        new MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.dialog_delete_transaction_title)
+            .setMessage(R.string.dialog_delete_transaction_message)
+            .setNegativeButton(R.string.action_cancel, null)
+            .setPositiveButton(R.string.action_delete, (dialog, which) -> {
+                financeViewModel.deleteTransaction(editingTransactionId);
+                Toast.makeText(this, R.string.message_transaction_deleted, Toast.LENGTH_SHORT).show();
+                finish();
+            })
+            .show();
+    }
+
     private void onSubmitCompleted(String errorMessage) {
         runOnUiThread(() -> {
             if (isFinishing() || isDestroyed()) {
@@ -1015,9 +1176,40 @@ public class AddTransactionActivity extends AppCompatActivity {
                 }
                 return;
             }
+            if (isEditMode()) {
+                Toast.makeText(this, R.string.message_transaction_updated, Toast.LENGTH_SHORT).show();
+                if (financeViewModel != null) {
+                    financeViewModel.refreshRealtimeSync();
+                }
+                finish();
+                return;
+            }
             Toast.makeText(this, R.string.message_transaction_saved, Toast.LENGTH_SHORT).show();
-            finish();
+            resetFormToDefaultState();
+            if (financeViewModel != null) {
+                financeViewModel.refreshRealtimeSync();
+            }
         });
+    }
+
+    private void resetFormToDefaultState() {
+        selectedMode = Mode.EXPENSE;
+        selectedDateTimeMillis = System.currentTimeMillis();
+        selectedCategoryId = null;
+        selectedCategoryName = null;
+        selectedDestinationWallet = null;
+        prefillSourceWalletId = null;
+        prefillDestinationWalletId = null;
+        selectedSourceWallet = wallets.isEmpty() ? null : wallets.get(0);
+
+        etAmount.setText("");
+        etActualBalance.setText("");
+        etNote.setText("");
+        tvError.setVisibility(View.GONE);
+
+        refreshModeUi();
+        updateDateLabel();
+        etAmount.requestFocus();
     }
 
     private boolean isPermissionDenied(String message) {

@@ -60,7 +60,6 @@ public class CategoryPickerActivity extends AppCompatActivity {
     private MaterialButtonToggleGroup toggleGroup;
     private MaterialButton btnExpense;
     private MaterialButton btnIncome;
-    private MaterialButton btnEditor;
     private LinearLayout listContainer;
     private TextView tvEmpty;
 
@@ -74,14 +73,12 @@ public class CategoryPickerActivity extends AppCompatActivity {
         setupToggle();
         setupSearch();
         setupSession();
-        btnEditor.setOnClickListener(v -> openCategoryEditor());
     }
 
     private void bindViews() {
         toggleGroup = findViewById(R.id.toggleCategoryPickerType);
         btnExpense = findViewById(R.id.btnCategoryPickerExpense);
         btnIncome = findViewById(R.id.btnCategoryPickerIncome);
-        btnEditor = findViewById(R.id.btnOpenCategoryEditor);
         listContainer = findViewById(R.id.layoutCategoryPickerContainer);
         tvEmpty = findViewById(R.id.tvCategoryPickerEmpty);
     }
@@ -102,6 +99,7 @@ public class CategoryPickerActivity extends AppCompatActivity {
 
     private void setupToolbar() {
         MaterialToolbar toolbar = findViewById(R.id.toolbarCategoryPicker);
+        toolbar.setTitle(R.string.app_title_pick_category);
         toolbar.setNavigationOnClickListener(v -> finish());
         toolbar.setOnMenuItemClickListener(this::onToolbarMenuClick);
     }

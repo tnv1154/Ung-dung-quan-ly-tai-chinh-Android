@@ -40,8 +40,26 @@ public class SessionViewModel extends ViewModel {
     }
 
     public void register(String email, String password) {
+        register(email, password, null);
+    }
+
+    public void register(String email, String password, String displayName) {
         setState(true, currentUser(), null);
         auth.createUserWithEmailAndPassword(email, password)
+            .addOnSuccessListener(result -> {
+                FirebaseUser user = result.getUser();
+                String name = safe(displayName).trim();
+                if (user == null || name.isBlank()) {
+                    setState(false, currentUser(), null);
+                    return;
+                }
+                UserProfileChangeRequest request = new UserProfileChangeRequest.Builder()
+                    .setDisplayName(name)
+                    .build();
+                user.updateProfile(request)
+                    .addOnSuccessListener(unused -> setState(false, currentUser(), null))
+                    .addOnFailureListener(error -> setState(false, currentUser(), messageOrDefault(error, "Đăng ký thất bại")));
+            })
             .addOnFailureListener(error -> setState(false, currentUser(), messageOrDefault(error, "Đăng ký thất bại")));
     }
 
@@ -174,6 +192,49 @@ public class SessionViewModel extends ViewModel {
             })
             .addOnFailureListener(error -> {
                 String message = messageOrDefault(error, "Không thể gửi email khôi phục mật khẩu");
+                setState(false, currentUser(), message);
+                onComplete.accept(message);
+            });
+    }
+
+    public void verifyPasswordResetCode(String resetCode, Consumer<String> onComplete) {
+        String code = safe(resetCode).trim();
+        if (code.isBlank()) {
+            onComplete.accept("Vui lòng nhập mã xác thực.");
+            return;
+        }
+        setState(true, currentUser(), null);
+        auth.verifyPasswordResetCode(code)
+            .addOnSuccessListener(email -> {
+                setState(false, currentUser(), null);
+                onComplete.accept(null);
+            })
+            .addOnFailureListener(error -> {
+                String message = messageOrDefault(error, "Mã xác thực không hợp lệ hoặc đã hết hạn.");
+                setState(false, currentUser(), message);
+                onComplete.accept(message);
+            });
+    }
+
+    public void confirmPasswordReset(String resetCode, String newPassword, Consumer<String> onComplete) {
+        String code = safe(resetCode).trim();
+        String password = safe(newPassword).trim();
+        if (code.isBlank()) {
+            onComplete.accept("Mã xác thực không hợp lệ.");
+            return;
+        }
+        if (password.length() < 8) {
+            onComplete.accept("Mật khẩu mới phải có ít nhất 8 ký tự.");
+            return;
+        }
+        setState(true, currentUser(), null);
+        auth.confirmPasswordReset(code, password)
+            .addOnSuccessListener(unused -> {
+                setState(false, currentUser(), null);
+                onComplete.accept(null);
+            })
+            .addOnFailureListener(error -> {
+                String message = messageOrDefault(error, "Không thể tạo mật khẩu mới.");
                 setState(false, currentUser(), message);
                 onComplete.accept(message);
             });

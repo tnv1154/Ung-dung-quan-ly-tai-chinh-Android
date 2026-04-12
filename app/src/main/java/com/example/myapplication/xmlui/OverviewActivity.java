@@ -1,10 +1,12 @@
 package com.example.myapplication.xmlui;
 
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -15,12 +17,17 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.ViewModelProvider;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.myapplication.MainActivity;
 import com.example.myapplication.R;
 import com.example.myapplication.finance.data.FirestoreFinanceRepository;
 import com.example.myapplication.finance.model.BudgetLimit;
+import com.example.myapplication.finance.model.ExchangeRateSnapshot;
 import com.example.myapplication.finance.model.FinanceTransaction;
+import com.example.myapplication.finance.model.TransactionCategory;
+import com.example.myapplication.finance.model.TransactionType;
 import com.example.myapplication.finance.model.Wallet;
 import com.example.myapplication.finance.ui.FinanceUiState;
 import com.example.myapplication.finance.ui.FinanceViewModel;
@@ -28,17 +35,32 @@ import com.example.myapplication.finance.ui.FinanceViewModelFactory;
 import com.example.myapplication.finance.ui.SessionUiState;
 import com.example.myapplication.finance.ui.SessionViewModel;
 import com.example.myapplication.xmlui.budget.BudgetCycleUtils;
+import com.example.myapplication.xmlui.currency.CurrencyRateUtils;
+import com.example.myapplication.xmlui.currency.ExchangeRateSnapshotLoader;
 import com.example.myapplication.xmlui.notifications.BudgetAlertNotifier;
 import com.example.myapplication.xmlui.notifications.ReminderScheduler;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class OverviewActivity extends AppCompatActivity {
+    private static final String TAG = "OverviewActivity";
+    private static final int RECENT_LIMIT = 5;
+
+    private enum Scope { WEEK, MONTH, QUARTER }
 
     private SessionViewModel sessionViewModel;
     private FinanceViewModel financeViewModel;
@@ -49,6 +71,8 @@ public class OverviewActivity extends AppCompatActivity {
     private TextView tvGreetingTitle;
     private TextView tvCurrencyChip;
     private TextView tvTrend;
+    private TextView tvIncomeLabel;
+    private TextView tvExpenseLabel;
     private TextView tvIncome;
     private TextView tvExpense;
     private TextView tvBudgetTitle;
@@ -61,14 +85,19 @@ public class OverviewActivity extends AppCompatActivity {
     private LinearLayout budgetItemsLayout;
     private ProgressBar pbBudget;
     private View cardBudget;
-    private View cardRecent;
-    private TextView tvRecentName;
-    private TextView tvRecentTime;
-    private TextView tvRecentAmount;
+    private RecyclerView rvRecentTransactions;
     private TextView tvNoTransactions;
     private TextView tvViewAll;
+    private MaterialButton btnScopeWeek;
+    private MaterialButton btnScopeMonth;
+    private MaterialButton btnScopeQuarter;
+    private FinanceUiState latestState;
+    private ExchangeRateSnapshot latestRateSnapshot;
     private FinanceUiState lastStableState;
     private long lastStableRealtimeMs;
+    private Scope selectedScope = Scope.MONTH;
+    private final ExecutorService rateExecutor = Executors.newSingleThreadExecutor();
+    private TransactionRowAdapter recentAdapter;
     private final Handler greetingHandler = new Handler(Looper.getMainLooper());
     private final Runnable greetingTicker = new Runnable() {
         @Override
@@ -83,9 +112,12 @@ public class OverviewActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_overview);
         bindViews();
+        setupRecentList();
         setupToolbar();
+        setupScopeActions();
         setupBottomNavigation();
         setupSession();
+        refreshScopeButtons();
     }
 
     private void bindViews() {
@@ -94,6 +126,8 @@ public class OverviewActivity extends AppCompatActivity {
         tvGreetingTitle = findViewById(R.id.tvOverviewGreetingTitle);
         tvCurrencyChip = findViewById(R.id.tvOverviewCurrencyChip);
         tvTrend = findViewById(R.id.tvOverviewTrend);
+        tvIncomeLabel = findViewById(R.id.tvOverviewIncomeLabel);
+        tvExpenseLabel = findViewById(R.id.tvOverviewExpenseLabel);
         tvIncome = findViewById(R.id.tvOverviewIncome);
         tvExpense = findViewById(R.id.tvOverviewExpense);
         tvBudgetTitle = findViewById(R.id.tvOverviewBudgetTitle);
@@ -106,12 +140,23 @@ public class OverviewActivity extends AppCompatActivity {
         budgetItemsLayout = findViewById(R.id.layoutOverviewBudgetItems);
         pbBudget = findViewById(R.id.pbOverviewBudget);
         cardBudget = findViewById(R.id.cardOverviewBudget);
-        cardRecent = findViewById(R.id.cardOverviewRecent);
-        tvRecentName = findViewById(R.id.tvOverviewRecentName);
-        tvRecentTime = findViewById(R.id.tvOverviewRecentTime);
-        tvRecentAmount = findViewById(R.id.tvOverviewRecentAmount);
+        rvRecentTransactions = findViewById(R.id.rvOverviewRecentTransactions);
         tvNoTransactions = findViewById(R.id.tvOverviewNoTransactions);
         tvViewAll = findViewById(R.id.tvOverviewViewAll);
+        btnScopeWeek = findViewById(R.id.btnOverviewScopeWeek);
+        btnScopeMonth = findViewById(R.id.btnOverviewScopeMonth);
+        btnScopeQuarter = findViewById(R.id.btnOverviewScopeQuarter);
+    }
+
+    private void setupRecentList() {
+        rvRecentTransactions.setLayoutManager(new LinearLayoutManager(this));
+        rvRecentTransactions.setNestedScrollingEnabled(false);
+        recentAdapter = new TransactionRowAdapter(
+            this::confirmDeleteTransaction,
+            this::openEditTransaction
+        );
+        rvRecentTransactions.setAdapter(recentAdapter);
+        rvRecentTransactions.setItemAnimator(null);
     }
 
     private void setupToolbar() {
@@ -130,9 +175,44 @@ public class OverviewActivity extends AppCompatActivity {
         });
     }
 
+    private void setupScopeActions() {
+        btnScopeWeek.setOnClickListener(v -> selectScope(Scope.WEEK));
+        btnScopeMonth.setOnClickListener(v -> selectScope(Scope.MONTH));
+        btnScopeQuarter.setOnClickListener(v -> selectScope(Scope.QUARTER));
+    }
+
+    private void selectScope(Scope scope) {
+        if (selectedScope == scope) {
+            return;
+        }
+        selectedScope = scope;
+        refreshScopeButtons();
+        if (latestState != null) {
+            renderFinanceState(latestState);
+        }
+    }
+
+    private void refreshScopeButtons() {
+        styleScopeButton(btnScopeWeek, selectedScope == Scope.WEEK);
+        styleScopeButton(btnScopeMonth, selectedScope == Scope.MONTH);
+        styleScopeButton(btnScopeQuarter, selectedScope == Scope.QUARTER);
+    }
+
+    private void styleScopeButton(MaterialButton button, boolean selected) {
+        int fill = selected ? R.color.card_bg : android.R.color.transparent;
+        int text = selected ? R.color.text_primary : R.color.text_secondary;
+        int stroke = R.color.divider;
+        button.setBackgroundTintList(ColorStateList.valueOf(getColor(fill)));
+        button.setStrokeColor(ColorStateList.valueOf(getColor(stroke)));
+        button.setTextColor(getColor(text));
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+        if (financeViewModel != null) {
+            financeViewModel.refreshRealtimeSync();
+        }
         updateGreetingSubtitle();
         greetingHandler.removeCallbacks(greetingTicker);
         greetingHandler.post(greetingTicker);
@@ -142,6 +222,13 @@ public class OverviewActivity extends AppCompatActivity {
     protected void onPause() {
         greetingHandler.removeCallbacks(greetingTicker);
         super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        greetingHandler.removeCallbacks(greetingTicker);
+        rateExecutor.shutdownNow();
+        super.onDestroy();
     }
 
     private void setupBottomNavigation() {
@@ -199,6 +286,7 @@ public class OverviewActivity extends AppCompatActivity {
     }
 
     private void renderFinanceState(@NonNull FinanceUiState state) {
+        latestState = state;
         FinanceUiState displayState = state;
         if (shouldKeepStableState(state)) {
             displayState = lastStableState;
@@ -210,11 +298,30 @@ public class OverviewActivity extends AppCompatActivity {
         BudgetAlertNotifier.maybeNotifyExceeded(this, displayState);
         BudgetAlertNotifier.maybeNotifyNearLimit(this, displayState);
         updateGreetingSubtitle();
+        loadLatestRateSnapshot();
+
+        Map<String, String> walletCurrencyMap = buildWalletCurrencyMap(displayState.getWallets());
 
         double totalBalance = 0.0;
         for (Wallet wallet : displayState.getWallets()) {
-            totalBalance += wallet.getBalance();
+            totalBalance += walletBalanceInVnd(wallet);
         }
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.systemDefault());
+        ZonedDateTime currentRangeStart = startForScope(selectedScope, now);
+        ZonedDateTime currentRangeEnd = endForScope(selectedScope, currentRangeStart);
+        ZonedDateTime previousRangeStart = previousStartForScope(selectedScope, currentRangeStart);
+        MonthAggregate currentRange = aggregateInRange(
+            displayState.getTransactions(),
+            currentRangeStart,
+            currentRangeEnd,
+            walletCurrencyMap
+        );
+        MonthAggregate previousRange = aggregateInRange(
+            displayState.getTransactions(),
+            previousRangeStart,
+            currentRangeStart,
+            walletCurrencyMap
+        );
         String displayName = "bạn";
         if (sessionViewModel != null && sessionViewModel.getUiStateLiveData().getValue() != null
             && sessionViewModel.getUiStateLiveData().getValue().getCurrentUser() != null) {
@@ -224,15 +331,14 @@ public class OverviewActivity extends AppCompatActivity {
             }
         }
         tvGreetingTitle.setText(getString(R.string.overview_greeting_title, normalizeDisplayName(displayName)));
-        tvTotalBalance.setText(UiFormatters.money(totalBalance));
-        String currency = displayState.getSettings().getCurrency();
-        if (currency == null || currency.trim().isEmpty()) {
-            currency = getString(R.string.overview_currency_chip);
-        }
-        tvCurrencyChip.setText(currency.trim().toUpperCase(Locale.ROOT));
-        tvIncome.setText(UiFormatters.money(displayState.getMonthlySummary().getTotalIncome()));
-        tvExpense.setText(UiFormatters.money(displayState.getMonthlySummary().getTotalExpense()));
-        updateTrend(displayState);
+        tvTotalBalance.setText(formatCompactMoney(totalBalance));
+        tvTotalBalance.setTextColor(getColor(totalBalance < 0.0 ? R.color.expense_red : android.R.color.white));
+        tvCurrencyChip.setText(getString(R.string.overview_currency_chip));
+        tvIncomeLabel.setText(labelIncomeForScope(selectedScope));
+        tvExpenseLabel.setText(labelExpenseForScope(selectedScope));
+        tvIncome.setText(formatCompactMoney(currentRange.income));
+        tvExpense.setText(formatCompactMoney(currentRange.expense));
+        updateTrend(currentRange.net(), previousRange.net());
 
         updateBudgetStatus(displayState);
         updateRecentTransactions(displayState);
@@ -263,7 +369,7 @@ public class OverviewActivity extends AppCompatActivity {
             cardBudget.setVisibility(View.VISIBLE);
             tvBudgetTitle.setText(R.string.app_title_budgets);
             tvBudgetSummary.setText(R.string.budget_summary_no_active);
-            tvBudgetUsed.setText(getString(R.string.overview_budget_used, UiFormatters.money(0)));
+            tvBudgetUsed.setText(getString(R.string.overview_budget_used, formatCompactMoney(0)));
             tvBudgetPercent.setText(R.string.default_percent_zero);
             pbBudget.setProgress(0);
             tvBudgetStatus.setVisibility(View.GONE);
@@ -287,6 +393,7 @@ public class OverviewActivity extends AppCompatActivity {
             double spent = BudgetCycleUtils.calculateSpentInWindow(
                 budget,
                 state.getTransactions(),
+                CategoryFallbackMerger.mergeWithFallbacks(state.getCategories()),
                 zoneId,
                 window.getStart(),
                 window.getEnd()
@@ -317,7 +424,7 @@ public class OverviewActivity extends AppCompatActivity {
         if (activeBudgets.isEmpty()) {
             tvBudgetTitle.setText(R.string.app_title_budgets);
             tvBudgetSummary.setText(R.string.budget_summary_no_active);
-            tvBudgetUsed.setText(getString(R.string.overview_budget_used, UiFormatters.money(0)));
+            tvBudgetUsed.setText(getString(R.string.overview_budget_used, formatCompactMoney(0)));
             tvBudgetPercent.setText(R.string.default_percent_zero);
             pbBudget.setProgress(0);
             tvBudgetStatus.setVisibility(View.GONE);
@@ -330,13 +437,14 @@ public class OverviewActivity extends AppCompatActivity {
         tvBudgetTitle.setText(getString(R.string.budget_overview_title_count, activeBudgets.size()));
         tvBudgetSummary.setText(getString(
             R.string.overview_budget_summary_usage,
-            UiFormatters.money(totalSpent),
-            UiFormatters.money(totalLimit)
+            formatCompactMoney(totalSpent),
+            formatCompactMoney(totalLimit)
         ));
-        tvBudgetUsed.setText(getString(R.string.overview_budget_used, UiFormatters.money(totalSpent)));
+        tvBudgetUsed.setText(getString(R.string.overview_budget_used, formatCompactMoney(totalSpent)));
         double totalRatio = totalLimit <= 0.0 ? 0.0 : totalSpent / totalLimit;
-        int progress = (int) Math.min(100, Math.max(0, Math.round(totalRatio * 100.0)));
-        tvBudgetPercent.setText(getString(R.string.format_percent_int, progress));
+        double totalRatioPercent = totalRatio * 100.0;
+        int progress = (int) Math.min(100, Math.max(0, Math.round(totalRatioPercent)));
+        tvBudgetPercent.setText(formatUnsignedPercent(totalRatioPercent));
         pbBudget.setProgress(progress);
 
         if (totalRatio >= 1.0) {
@@ -360,8 +468,8 @@ public class OverviewActivity extends AppCompatActivity {
             nameView.setText(preview.getName());
             metaView.setText(getString(
                 R.string.overview_budget_item_meta,
-                UiFormatters.money(preview.getSpent()),
-                UiFormatters.money(preview.getLimitAmount())
+                formatCompactMoney(preview.getSpent()),
+                formatCompactMoney(preview.getLimitAmount())
             ));
             if (preview.getRatio() >= 1.0) {
                 metaView.setTextColor(getColor(R.color.error_red));
@@ -387,85 +495,189 @@ public class OverviewActivity extends AppCompatActivity {
         return category.isEmpty() ? getString(R.string.overview_budget_title_default) : category;
     }
 
-    private void updateTrend(FinanceUiState state) {
-        List<FinanceTransaction> txs = state.getTransactions();
-        if (txs.isEmpty()) {
-            tvTrend.setText(getString(R.string.overview_balance_trend, "0%"));
-            return;
-        }
-        long now = System.currentTimeMillis() / 1000L;
-        long lastMonthStart = now - 30L * 24 * 3600;
-        long prevMonthStart = now - 60L * 24 * 3600;
-        double current = 0.0;
-        double previous = 0.0;
-        for (FinanceTransaction tx : txs) {
-            if (tx.getType() != com.example.myapplication.finance.model.TransactionType.INCOME) {
-                continue;
-            }
-            long second = tx.getCreatedAt().getSeconds();
-            if (second >= lastMonthStart) {
-                current += tx.getAmount();
-            } else if (second >= prevMonthStart && second < lastMonthStart) {
-                previous += tx.getAmount();
-            }
-        }
+    private void updateTrend(double currentNet, double previousNet) {
         double changePercent;
-        if (previous <= 0.0) {
-            changePercent = current > 0.0 ? 100.0 : 0.0;
+        if (Math.abs(previousNet) < 0.0001) {
+            if (Math.abs(currentNet) < 0.0001) {
+                changePercent = 0.0;
+            } else {
+                changePercent = currentNet > 0.0 ? 100.0 : -100.0;
+            }
         } else {
-            changePercent = ((current - previous) / previous) * 100.0;
+            changePercent = ((currentNet - previousNet) / Math.abs(previousNet)) * 100.0;
         }
-        String signed = String.format(Locale.US, "%+.0f%%", changePercent);
-        tvTrend.setText(getString(R.string.overview_balance_trend, signed));
+        tvTrend.setText(getString(trendTextForScope(selectedScope), formatSignedPercent(changePercent)));
+    }
+
+    private int trendTextForScope(Scope scope) {
+        if (scope == Scope.WEEK) {
+            return R.string.overview_balance_trend_week;
+        }
+        if (scope == Scope.QUARTER) {
+            return R.string.overview_balance_trend_quarter;
+        }
+        return R.string.overview_balance_trend_month;
+    }
+
+    private int labelIncomeForScope(Scope scope) {
+        if (scope == Scope.WEEK) {
+            return R.string.overview_income_scope_week;
+        }
+        if (scope == Scope.QUARTER) {
+            return R.string.overview_income_scope_quarter;
+        }
+        return R.string.overview_income_scope_month;
+    }
+
+    private int labelExpenseForScope(Scope scope) {
+        if (scope == Scope.WEEK) {
+            return R.string.overview_expense_scope_week;
+        }
+        if (scope == Scope.QUARTER) {
+            return R.string.overview_expense_scope_quarter;
+        }
+        return R.string.overview_expense_scope_month;
     }
 
     private void updateRecentTransactions(FinanceUiState state) {
-        if (state.getTransactions().isEmpty()) {
-            cardRecent.setVisibility(View.GONE);
-            tvNoTransactions.setVisibility(View.VISIBLE);
-            return;
-        }
-        FinanceTransaction tx = null;
-        for (FinanceTransaction item : state.getTransactions()) {
-            if (tx == null || item.getCreatedAt().getSeconds() > tx.getCreatedAt().getSeconds()) {
-                tx = item;
-            }
-        }
-        if (tx == null) {
-            cardRecent.setVisibility(View.GONE);
-            tvNoTransactions.setVisibility(View.VISIBLE);
-            return;
-        }
-        cardRecent.setVisibility(View.VISIBLE);
-        tvNoTransactions.setVisibility(View.GONE);
-        String note = tx.getNote() == null ? "" : tx.getNote().trim();
-        String category = normalizedCategory(tx.getCategory());
-        String recentName = !note.isEmpty()
-            ? note
-            : (!category.isEmpty() ? category : getString(R.string.overview_recent_store_default));
-        tvRecentName.setText(recentName);
-        long now = System.currentTimeMillis() / 1000L;
-        long txSec = tx.getCreatedAt().getSeconds();
-        long delta = Math.max(0L, now - txSec);
-        String timePart = UiFormatters.timeOnly(tx.getCreatedAt());
-        if (delta < 24L * 3600L) {
-            tvRecentTime.setText(getString(R.string.overview_recent_time_today, timePart));
-        } else {
-            tvRecentTime.setText(getString(
-                R.string.overview_recent_time_full,
-                UiFormatters.dateOnly(tx.getCreatedAt()),
-                timePart
-            ));
-        }
-        String amount = UiFormatters.moneyRaw(tx.getAmount());
-        boolean isIncome = tx.getType() == com.example.myapplication.finance.model.TransactionType.INCOME;
-        tvRecentAmount.setTextColor(getColor(isIncome ? R.color.income_green : R.color.expense_red));
-        String prefix = isIncome ? "+ " : "- ";
-        tvRecentAmount.setText(getString(R.string.format_signed_amount, prefix, amount));
+        List<UiTransaction> recent = buildRecentTransactions(state);
+        recentAdapter.submit(recent);
+        boolean empty = recent.isEmpty();
+        rvRecentTransactions.setVisibility(empty ? View.GONE : View.VISIBLE);
+        tvNoTransactions.setVisibility(empty ? View.VISIBLE : View.GONE);
     }
 
-    private String normalizedCategory(String value) {
-        return value == null ? "" : value.trim();
+    private List<UiTransaction> buildRecentTransactions(FinanceUiState state) {
+        Map<String, Wallet> walletById = new HashMap<>();
+        for (Wallet wallet : state.getWallets()) {
+            walletById.put(wallet.getId(), wallet);
+        }
+        Map<String, TransactionCategory> categoryByKey = buildCategoryByKey(state.getCategories());
+        List<UiTransaction> recent = new ArrayList<>();
+        for (FinanceTransaction tx : state.getTransactions()) {
+            if (tx == null || tx.getType() == null || tx.getCreatedAt() == null) {
+                continue;
+            }
+            Wallet wallet = walletById.get(tx.getWalletId());
+            String walletName = wallet == null ? getString(R.string.label_source_wallet) : wallet.getName();
+            String walletIconKey = wallet == null ? "cash" : wallet.getIconKey();
+            String walletAccountType = wallet == null ? "CASH" : wallet.getAccountType();
+            Wallet destinationWallet = tx.getToWalletId() == null ? null : walletById.get(tx.getToWalletId());
+            String destinationWalletName = destinationWallet == null ? "" : destinationWallet.getName();
+            String destinationWalletIconKey = destinationWallet == null ? "cash" : destinationWallet.getIconKey();
+            String destinationWalletAccountType = destinationWallet == null ? "CASH" : destinationWallet.getAccountType();
+            TransactionCategory category = categoryByKey.get(categoryKey(tx.getType(), tx.getCategory()));
+            String categoryIconKey = category == null ? "" : category.getIconKey();
+            if (categoryIconKey == null || categoryIconKey.trim().isEmpty()) {
+                categoryIconKey = CategoryUiHelper.inferIconKeyFromCategoryName(tx.getCategory(), tx.getType());
+            }
+            recent.add(new UiTransaction(
+                tx.getId(),
+                walletName,
+                tx.getCategory(),
+                tx.getNote(),
+                tx.getType().name(),
+                tx.getAmount(),
+                tx.getCreatedAt(),
+                categoryIconKey,
+                walletIconKey,
+                walletAccountType,
+                destinationWalletName,
+                destinationWalletIconKey,
+                destinationWalletAccountType
+            ));
+        }
+        recent.sort((left, right) -> Long.compare(
+            right.getCreatedAt().getSeconds(),
+            left.getCreatedAt().getSeconds()
+        ));
+        if (recent.size() > RECENT_LIMIT) {
+            return new ArrayList<>(recent.subList(0, RECENT_LIMIT));
+        }
+        return recent;
+    }
+
+    private Map<String, TransactionCategory> buildCategoryByKey(List<TransactionCategory> categories) {
+        Map<String, TransactionCategory> map = new HashMap<>();
+        for (TransactionCategory category : categories) {
+            if (category == null || category.getType() == null) {
+                continue;
+            }
+            map.put(categoryKey(category.getType(), category.getName()), category);
+        }
+        return map;
+    }
+
+    private String categoryKey(TransactionType type, String categoryName) {
+        return type.name() + "::" + CategoryUiHelper.normalize(categoryName);
+    }
+
+    private void confirmDeleteTransaction(UiTransaction transaction) {
+        if (transaction == null) {
+            return;
+        }
+        new MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.dialog_delete_transaction_title)
+            .setMessage(R.string.dialog_delete_transaction_message)
+            .setNegativeButton(R.string.action_cancel, null)
+            .setPositiveButton(R.string.action_delete, (dialog, which) -> {
+                if (financeViewModel != null) {
+                    financeViewModel.deleteTransaction(transaction.getId());
+                    Toast.makeText(this, R.string.message_transaction_deleted, Toast.LENGTH_SHORT).show();
+                }
+            })
+            .show();
+    }
+
+    private void openEditTransaction(UiTransaction transaction) {
+        if (transaction == null || latestState == null) {
+            return;
+        }
+        FinanceTransaction target = findTransactionById(transaction.getId());
+        if (target == null) {
+            Toast.makeText(this, R.string.error_unknown, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent intent = new Intent(this, AddTransactionActivity.class);
+        intent.putExtra(AddTransactionActivity.EXTRA_EDIT_TRANSACTION_ID, target.getId());
+        intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_MODE, resolvePrefillMode(target.getType()));
+        intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_SOURCE_WALLET_ID, target.getWalletId());
+        intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_DESTINATION_WALLET_ID, target.getToWalletId());
+        intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_AMOUNT, target.getAmount());
+        intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_NOTE, target.getNote());
+        intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_CATEGORY_NAME, target.getCategory());
+        intent.putExtra(AddTransactionActivity.EXTRA_PREFILL_TIME_MILLIS, toEpochMillis(target));
+        startActivity(intent);
+    }
+
+    private FinanceTransaction findTransactionById(String transactionId) {
+        if (latestState == null || transactionId == null || transactionId.trim().isEmpty()) {
+            return null;
+        }
+        for (FinanceTransaction transaction : latestState.getTransactions()) {
+            if (transactionId.equals(transaction.getId())) {
+                return transaction;
+            }
+        }
+        return null;
+    }
+
+    private String resolvePrefillMode(TransactionType type) {
+        if (type == TransactionType.INCOME) {
+            return AddTransactionActivity.MODE_INCOME;
+        }
+        if (type == TransactionType.TRANSFER) {
+            return AddTransactionActivity.MODE_TRANSFER;
+        }
+        return AddTransactionActivity.MODE_EXPENSE;
+    }
+
+    private long toEpochMillis(FinanceTransaction transaction) {
+        if (transaction == null || transaction.getCreatedAt() == null) {
+            return System.currentTimeMillis();
+        }
+        return transaction.getCreatedAt().getSeconds() * 1000L
+            + (transaction.getCreatedAt().getNanoseconds() / 1_000_000L);
     }
 
     private String normalizeDisplayName(String value) {
@@ -486,6 +698,193 @@ public class OverviewActivity extends AppCompatActivity {
             ? R.string.overview_greeting_subtitle_morning
             : (hour < 18 ? R.string.overview_greeting_subtitle_afternoon : R.string.overview_greeting_subtitle_evening);
         tvGreetingSubtitle.setText(greetingRes);
+    }
+
+    private Map<String, String> buildWalletCurrencyMap(List<Wallet> wallets) {
+        Map<String, String> walletCurrencyMap = new HashMap<>();
+        for (Wallet wallet : wallets) {
+            walletCurrencyMap.put(wallet.getId(), CurrencyRateUtils.normalizeCurrency(wallet.getCurrency()));
+        }
+        return walletCurrencyMap;
+    }
+
+    private double walletBalanceInVnd(Wallet wallet) {
+        String walletCurrency = CurrencyRateUtils.normalizeCurrency(wallet.getCurrency());
+        Double converted = CurrencyRateUtils.convert(wallet.getBalance(), walletCurrency, "VND", latestRateSnapshot);
+        return converted == null ? 0.0 : converted;
+    }
+
+    private MonthAggregate aggregateInRange(
+        List<FinanceTransaction> transactions,
+        ZonedDateTime start,
+        ZonedDateTime end,
+        Map<String, String> walletCurrencyMap
+    ) {
+        double income = 0.0;
+        double expense = 0.0;
+        for (FinanceTransaction transaction : transactions) {
+            if (transaction == null || transaction.getCreatedAt() == null || transaction.getType() == null) {
+                continue;
+            }
+            ZonedDateTime txTime = Instant.ofEpochSecond(
+                transaction.getCreatedAt().getSeconds(),
+                transaction.getCreatedAt().getNanoseconds()
+            ).atZone(start.getZone());
+            if (txTime.isBefore(start) || !txTime.isBefore(end)) {
+                continue;
+            }
+            double amountVnd = amountInVnd(transaction, walletCurrencyMap);
+            if (transaction.getType() == TransactionType.INCOME) {
+                income += amountVnd;
+            } else if (transaction.getType() == TransactionType.EXPENSE) {
+                expense += amountVnd;
+            }
+        }
+        return new MonthAggregate(income, expense);
+    }
+
+    private double amountInVnd(FinanceTransaction transaction, Map<String, String> walletCurrencyMap) {
+        String currency = resolveTransactionCurrency(transaction, walletCurrencyMap);
+        Double converted = CurrencyRateUtils.convert(transaction.getAmount(), currency, "VND", latestRateSnapshot);
+        return converted == null ? 0.0 : converted;
+    }
+
+    private String resolveTransactionCurrency(FinanceTransaction transaction, Map<String, String> walletCurrencyMap) {
+        String sourceCurrency = transaction.getSourceCurrency();
+        if (sourceCurrency != null && !sourceCurrency.trim().isEmpty()) {
+            return CurrencyRateUtils.normalizeCurrency(sourceCurrency);
+        }
+        String walletCurrency = walletCurrencyMap.get(transaction.getWalletId());
+        return walletCurrency == null || walletCurrency.isBlank() ? "VND" : walletCurrency;
+    }
+
+    private ZonedDateTime startOfMonth(ZonedDateTime value) {
+        return value.withDayOfMonth(1).toLocalDate().atStartOfDay(value.getZone());
+    }
+
+    private ZonedDateTime startOfWeek(ZonedDateTime value) {
+        int day = value.getDayOfWeek().getValue();
+        return value.minusDays(day - 1L).toLocalDate().atStartOfDay(value.getZone());
+    }
+
+    private ZonedDateTime startOfQuarter(ZonedDateTime value) {
+        int quarterStartMonth = ((value.getMonthValue() - 1) / 3) * 3 + 1;
+        return value.withMonth(quarterStartMonth).withDayOfMonth(1).toLocalDate().atStartOfDay(value.getZone());
+    }
+
+    private ZonedDateTime startForScope(Scope scope, ZonedDateTime reference) {
+        if (scope == Scope.WEEK) {
+            return startOfWeek(reference);
+        }
+        if (scope == Scope.QUARTER) {
+            return startOfQuarter(reference);
+        }
+        return startOfMonth(reference);
+    }
+
+    private ZonedDateTime endForScope(Scope scope, ZonedDateTime start) {
+        if (scope == Scope.WEEK) {
+            return start.plusWeeks(1);
+        }
+        if (scope == Scope.QUARTER) {
+            return start.plusMonths(3);
+        }
+        return start.plusMonths(1);
+    }
+
+    private ZonedDateTime previousStartForScope(Scope scope, ZonedDateTime currentStart) {
+        if (scope == Scope.WEEK) {
+            return currentStart.minusWeeks(1);
+        }
+        if (scope == Scope.QUARTER) {
+            return currentStart.minusMonths(3);
+        }
+        return currentStart.minusMonths(1);
+    }
+
+    private String formatCompactMoney(double value) {
+        double abs = Math.abs(value);
+        if (abs >= 1_000_000_000d) {
+            return String.format(Locale.US, "%.1fB", value / 1_000_000_000d);
+        }
+        if (abs >= 1_000_000d) {
+            return String.format(Locale.US, "%.1fM", value / 1_000_000d);
+        }
+        if (abs >= 1_000d) {
+            return String.format(Locale.US, "%.1fK", value / 1_000d);
+        }
+        return UiFormatters.moneyRaw(value);
+    }
+
+    private String formatUnsignedPercent(double value) {
+        double abs = Math.max(0.0, value);
+        if (abs >= 1_000_000d) {
+            return String.format(Locale.US, "%.1fM%%", abs / 1_000_000d);
+        }
+        if (abs >= 1_000d) {
+            return String.format(Locale.US, "%.1fK%%", abs / 1_000d);
+        }
+        return String.format(Locale.US, "%.0f%%", abs);
+    }
+
+    private String formatSignedPercent(double value) {
+        double abs = Math.abs(value);
+        if (abs < 0.05) {
+            return "0%";
+        }
+        String prefix = value > 0.0 ? "+" : "-";
+        if (abs >= 1_000_000d) {
+            return String.format(Locale.US, "%s%.1fM%%", prefix, abs / 1_000_000d);
+        }
+        if (abs >= 1_000d) {
+            return String.format(Locale.US, "%s%.1fK%%", prefix, abs / 1_000d);
+        }
+        return String.format(Locale.US, "%s%.0f%%", prefix, abs);
+    }
+
+    private void loadLatestRateSnapshot() {
+        if (latestRateSnapshot != null) {
+            return;
+        }
+        String userId = observedUserId;
+        if (userId == null || userId.isBlank()) {
+            return;
+        }
+        rateExecutor.submit(() -> {
+            ExchangeRateSnapshot snapshot = null;
+            try {
+                snapshot = ExchangeRateSnapshotLoader.loadWithFallback(new FirestoreFinanceRepository(), userId);
+            } catch (Exception exception) {
+                Log.w(TAG, "Cannot load exchange rates for overview", exception);
+            }
+            ExchangeRateSnapshot finalSnapshot = snapshot;
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                if (finalSnapshot == null || latestRateSnapshot != null) {
+                    return;
+                }
+                latestRateSnapshot = finalSnapshot;
+                if (latestState != null) {
+                    renderFinanceState(latestState);
+                }
+            });
+        });
+    }
+
+    private static final class MonthAggregate {
+        private final double income;
+        private final double expense;
+
+        private MonthAggregate(double income, double expense) {
+            this.income = income;
+            this.expense = expense;
+        }
+
+        private double net() {
+            return income - expense;
+        }
     }
 
     private void goToAuth() {

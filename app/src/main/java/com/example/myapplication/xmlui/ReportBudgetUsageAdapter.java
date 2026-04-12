@@ -73,11 +73,13 @@ public class ReportBudgetUsageAdapter extends RecyclerView.Adapter<ReportBudgetU
     @Override
     public void onBindViewHolder(@NonNull BudgetViewHolder holder, int position) {
         UiReportBudgetUsage item = items.get(position);
+        boolean exceeded = item.getRatio() > 1.0;
         holder.iconContainer.setBackgroundTintList(ColorStateList.valueOf(item.getIconBgColor()));
         holder.icon.setImageResource(item.getIconRes());
         holder.icon.setImageTintList(ColorStateList.valueOf(item.getIconTintColor()));
         holder.name.setText(item.getName());
         holder.percent.setText(holder.itemView.getContext().getString(R.string.format_percent_int, (int) Math.round(item.getRatio() * 100.0)));
+        holder.percent.setTextColor(holder.itemView.getContext().getColor(exceeded ? R.color.error_red : R.color.overview_warning_text));
         holder.amount.setText(holder.itemView.getContext().getString(
             R.string.report_budget_usage_spent_of_limit,
             UiFormatters.moneyRaw(item.getSpent()),
@@ -85,7 +87,7 @@ public class ReportBudgetUsageAdapter extends RecyclerView.Adapter<ReportBudgetU
         ));
         holder.progress.setProgress((int) Math.round(Math.min(100.0, item.getRatio() * 100.0)));
         holder.progress.setProgressTintList(ColorStateList.valueOf(
-            holder.itemView.getContext().getColor(item.getRatio() > 1.0 ? R.color.error_red : R.color.overview_progress_fill)
+            holder.itemView.getContext().getColor(exceeded ? R.color.error_red : R.color.overview_progress_fill)
         ));
     }
 

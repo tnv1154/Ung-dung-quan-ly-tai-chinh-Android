@@ -153,7 +153,7 @@ public class WalletDetailActivity extends AppCompatActivity {
         btnTypePicker.setOnClickListener(v -> showTypeSelector());
         btnProviderPicker.setOnClickListener(v -> showProviderSelector());
         btnCurrencyPicker.setOnClickListener(v -> showCurrencySelector());
-        MoneyInputFormatter.attach(etHeaderBalance);
+        MoneyInputFormatter.attachSigned(etHeaderBalance);
 
         etHeaderBalance.setOnFocusChangeListener((v, hasFocus) -> {
             if (!hasFocus) {
@@ -359,7 +359,7 @@ public class WalletDetailActivity extends AppCompatActivity {
 
     private void updateHeaderBalance() {
         String raw = normalizedAmountText(etHeaderBalance);
-        if (raw.isEmpty()) {
+        if (raw.isEmpty() || "-".equals(raw)) {
             etHeaderBalance.setText("0");
         }
     }
@@ -414,11 +414,6 @@ public class WalletDetailActivity extends AppCompatActivity {
             showTextError(getString(R.string.error_invalid_opening_balance));
             return;
         }
-        if (openingBalance < 0.0) {
-            showTextError(getString(R.string.error_invalid_opening_balance));
-            return;
-        }
-
         submitPending = true;
         waitingCreateWalletResult = true;
         waitingCreateWalletName = walletName;
@@ -522,7 +517,7 @@ public class WalletDetailActivity extends AppCompatActivity {
     }
 
     private String normalizedAmountText(TextInputEditText input) {
-        return MoneyInputFormatter.normalizeAmount(
+        return MoneyInputFormatter.normalizeSignedAmount(
             safe(input.getText() == null ? "" : input.getText().toString())
         );
     }
