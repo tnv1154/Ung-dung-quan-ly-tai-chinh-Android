@@ -3,6 +3,7 @@ package com.example.myapplication.xmlui;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -24,18 +25,26 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 
 public class AuthActivity extends AppCompatActivity {
 
     private SessionViewModel sessionViewModel;
-    private TextInputEditText etEmail;
+    private TextInputEditText etAccount;
     private TextInputEditText etPassword;
+    private TextInputEditText etDisplayName;
+    private TextInputLayout inputAccount;
+    private TextInputLayout inputPassword;
+    private TextInputLayout inputDisplayName;
+    private TextView tvAuthTitle;
     private TextView tvAuthError;
-    private TextView tvAuthToggle;
+    private TextView tvAuthTogglePrefix;
+    private TextView tvAuthToggleAction;
     private TextView tvForgotPassword;
     private MaterialButton btnEmailAuth;
     private MaterialButton btnGoogle;
     private ProgressBar progressAuth;
+    private ImageView ivAuthHero;
     private boolean registerMode = false;
     @Nullable
     private GoogleSignInClient googleSignInClient;
@@ -52,14 +61,21 @@ public class AuthActivity extends AppCompatActivity {
     }
 
     private void bindViews() {
-        etEmail = findViewById(R.id.etEmail);
-        etPassword = findViewById(R.id.etPassword);
+        etAccount = findViewById(R.id.etAuthAccount);
+        etPassword = findViewById(R.id.etAuthPassword);
+        etDisplayName = findViewById(R.id.etAuthDisplayName);
+        inputAccount = findViewById(R.id.inputAuthAccount);
+        inputPassword = findViewById(R.id.inputAuthPassword);
+        inputDisplayName = findViewById(R.id.inputAuthDisplayName);
+        tvAuthTitle = findViewById(R.id.tvAuthTitle);
         tvAuthError = findViewById(R.id.tvAuthError);
-        tvAuthToggle = findViewById(R.id.tvAuthToggle);
+        tvAuthTogglePrefix = findViewById(R.id.tvAuthTogglePrefix);
+        tvAuthToggleAction = findViewById(R.id.tvAuthToggleAction);
         tvForgotPassword = findViewById(R.id.tvForgotPassword);
         btnEmailAuth = findViewById(R.id.btnEmailAuth);
         btnGoogle = findViewById(R.id.btnGoogle);
         progressAuth = findViewById(R.id.progressAuth);
+        ivAuthHero = findViewById(R.id.ivAuthHero);
     }
 
     private void configureGoogle() {
@@ -103,33 +119,53 @@ public class AuthActivity extends AppCompatActivity {
     private void setupActions() {
         btnEmailAuth.setOnClickListener(v -> handleEmailAuth());
         btnGoogle.setOnClickListener(v -> handleGoogleAuth());
-        tvAuthToggle.setOnClickListener(v -> {
+        tvAuthToggleAction.setOnClickListener(v -> {
             registerMode = !registerMode;
             renderMode();
         });
-        tvForgotPassword.setOnClickListener(v -> handleForgotPassword());
+        tvForgotPassword.setOnClickListener(v -> openForgotPassword());
         renderMode();
     }
 
     private void renderMode() {
+        tvAuthTitle.setText(registerMode ? R.string.auth_register_panel_title : R.string.auth_login_panel_title);
         btnEmailAuth.setText(registerMode ? R.string.auth_action_register : R.string.auth_action_sign_in);
-        tvAuthToggle.setText(registerMode ? R.string.auth_toggle_to_login : R.string.auth_toggle_to_register);
+        tvAuthTogglePrefix.setText(registerMode ? R.string.auth_toggle_login_prefix : R.string.auth_toggle_register_prefix);
+        tvAuthToggleAction.setText(registerMode ? R.string.auth_toggle_action_login : R.string.auth_toggle_action_register);
         tvForgotPassword.setVisibility(registerMode ? View.GONE : View.VISIBLE);
-        setTitle(registerMode ? R.string.auth_action_register : R.string.auth_title);
+        inputDisplayName.setVisibility(registerMode ? View.VISIBLE : View.GONE);
+        inputAccount.setHint(getString(registerMode ? R.string.auth_hint_account_register : R.string.auth_hint_account_login));
+        inputPassword.setHint(getString(registerMode ? R.string.auth_hint_password_register : R.string.auth_hint_password_login));
+        ivAuthHero.setImageResource(registerMode ? R.drawable.auth_register_hero_clean : R.drawable.auth_login_hero_clean);
+        if (!registerMode) {
+            etDisplayName.setText("");
+        }
+        tvAuthError.setVisibility(View.GONE);
     }
 
     private void handleEmailAuth() {
-        String email = etEmail.getText() != null ? etEmail.getText().toString().trim() : "";
+        String account = etAccount.getText() != null ? etAccount.getText().toString().trim() : "";
         String password = etPassword.getText() != null ? etPassword.getText().toString() : "";
-        if (!email.contains("@") || password.length() < 6) {
-            tvAuthError.setText(R.string.error_invalid_email_password);
+        String displayName = etDisplayName.getText() != null ? etDisplayName.getText().toString().trim() : "";
+        if (account.isEmpty()) {
+            tvAuthError.setText(R.string.auth_error_account_required);
+            tvAuthError.setVisibility(View.VISIBLE);
+            return;
+        }
+        if (password.length() < 6) {
+            tvAuthError.setText(R.string.auth_error_password_required);
+            tvAuthError.setVisibility(View.VISIBLE);
+            return;
+        }
+        if (registerMode && displayName.isEmpty()) {
+            tvAuthError.setText(R.string.auth_error_display_name_required);
             tvAuthError.setVisibility(View.VISIBLE);
             return;
         }
         if (registerMode) {
-            sessionViewModel.register(email, password);
+            sessionViewModel.register(account, password, displayName);
         } else {
-            sessionViewModel.signIn(email, password);
+            sessionViewModel.signIn(account, password);
         }
     }
 
@@ -141,29 +177,16 @@ public class AuthActivity extends AppCompatActivity {
         googleSignInClient.signOut().addOnCompleteListener(task -> googleLauncher.launch(googleSignInClient.getSignInIntent()));
     }
 
-    private void handleForgotPassword() {
-        String email = etEmail.getText() != null ? etEmail.getText().toString().trim() : "";
-        if (email.isEmpty()) {
-            tvAuthError.setText(R.string.error_email_required_for_reset);
-            tvAuthError.setVisibility(View.VISIBLE);
-            return;
-        }
-        sessionViewModel.sendPasswordReset(email, error -> {
-            runOnUiThread(() -> {
-                if (error == null) {
-                    Toast.makeText(this, getString(R.string.auth_reset_password_message, email), Toast.LENGTH_LONG).show();
-                } else {
-                    tvAuthError.setText(error);
-                    tvAuthError.setVisibility(View.VISIBLE);
-                }
-            });
-        });
+    private void openForgotPassword() {
+        startActivity(new Intent(this, ForgotPasswordActivity.class));
     }
 
     private void renderState(SessionUiState state) {
         progressAuth.setVisibility(state.isLoading() ? View.VISIBLE : View.GONE);
         btnEmailAuth.setEnabled(!state.isLoading());
         btnGoogle.setEnabled(!state.isLoading());
+        tvAuthToggleAction.setEnabled(!state.isLoading());
+        tvForgotPassword.setEnabled(!state.isLoading());
         tvAuthError.setVisibility(state.getErrorMessage() == null ? View.GONE : View.VISIBLE);
         if (state.getErrorMessage() != null) {
             tvAuthError.setText(state.getErrorMessage());

@@ -15,6 +15,13 @@
         android:text="@string/label_notification_budget_exceeded" />
 
     <CheckBox
+        android:id="@+id/cbNotificationMonthlyReport"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="@string/label_notification_monthly_report_enabled" />
+
+    <CheckBox
         android:id="@+id/cbNotificationReminderEnabled"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

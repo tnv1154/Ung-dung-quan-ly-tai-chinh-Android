@@ -16,6 +16,14 @@ public final class MoneyInputFormatter {
     }
 
     public static void attach(TextInputEditText input) {
+        attachInternal(input, false);
+    }
+
+    public static void attachSigned(TextInputEditText input) {
+        attachInternal(input, true);
+    }
+
+    private static void attachInternal(TextInputEditText input, boolean allowSigned) {
         if (input == null) {
             return;
         }
@@ -36,11 +44,11 @@ public final class MoneyInputFormatter {
                     return;
                 }
                 String raw = s == null ? "" : s.toString();
-                String normalized = normalizeAmount(raw);
+                String normalized = allowSigned ? normalizeSignedAmount(raw) : normalizeAmount(raw);
                 if (normalized.isEmpty()) {
                     return;
                 }
-                String formatted = formatGrouped(normalized);
+                String formatted = allowSigned ? formatGroupedSigned(normalized) : formatGrouped(normalized);
                 if (formatted.equals(raw)) {
                     return;
                 }
@@ -53,22 +61,51 @@ public final class MoneyInputFormatter {
     }
 
     public static String normalizeAmount(String raw) {
+        return normalizeInternal(raw, false);
+    }
+
+    public static String normalizeSignedAmount(String raw) {
+        return normalizeInternal(raw, true);
+    }
+
+    private static String normalizeInternal(String raw, boolean allowSigned) {
         if (raw == null || raw.trim().isEmpty()) {
             return "";
         }
+        boolean negative = false;
         StringBuilder digits = new StringBuilder(raw.length());
         for (int i = 0; i < raw.length(); i++) {
             char c = raw.charAt(i);
             if (Character.isDigit(c)) {
                 digits.append(c);
+                continue;
+            }
+            if (allowSigned && c == '-' && !negative && digits.length() == 0) {
+                negative = true;
             }
         }
-        return digits.toString();
+        if (digits.length() == 0) {
+            return negative ? "-" : "";
+        }
+        return negative ? "-" + digits : digits.toString();
     }
 
     public static String formatGrouped(String digits) {
-        if (digits == null || digits.isEmpty()) {
+        return formatGroupedInternal(digits, false);
+    }
+
+    public static String formatGroupedSigned(String value) {
+        return formatGroupedInternal(value, true);
+    }
+
+    private static String formatGroupedInternal(String value, boolean allowSigned) {
+        if (value == null || value.isEmpty()) {
             return "";
+        }
+        boolean negative = allowSigned && value.startsWith("-");
+        String digits = negative ? value.substring(1) : value;
+        if (digits.isEmpty()) {
+            return negative ? "-" : "";
         }
         try {
             BigInteger number = new BigInteger(digits);
@@ -76,9 +113,10 @@ public final class MoneyInputFormatter {
             symbols.setGroupingSeparator('.');
             DecimalFormat decimalFormat = new DecimalFormat("#,###", symbols);
             decimalFormat.setGroupingUsed(true);
-            return decimalFormat.format(number);
+            String formatted = decimalFormat.format(number);
+            return negative ? "-" + formatted : formatted;
         } catch (NumberFormatException ex) {
-            return digits;
+            return value;
         }
     }
 }

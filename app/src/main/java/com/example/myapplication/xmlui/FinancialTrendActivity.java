@@ -45,7 +45,7 @@ import java.util.concurrent.Executors;
 
 public class FinancialTrendActivity extends AppCompatActivity {
 
-    private enum TrendScope { DAY, WEEK, MONTH, QUARTER }
+    private enum TrendScope { DAY, WEEK, MONTH, YEAR }
 
     private SessionViewModel sessionViewModel;
     private FinanceViewModel financeViewModel;
@@ -56,17 +56,22 @@ public class FinancialTrendActivity extends AppCompatActivity {
 
     private TrendScope selectedScope = TrendScope.DAY;
     private ZonedDateTime selectedStart = startOfDay(ZonedDateTime.now());
+    private ReportFilterState reportFilter = ReportFilterState.all();
 
     private MaterialButton btnTrendDay;
     private MaterialButton btnTrendWeek;
     private MaterialButton btnTrendMonth;
-    private MaterialButton btnTrendQuarter;
+    private MaterialButton btnTrendYear;
     private MaterialButton btnTrendPeriodPicker;
+    private MaterialButton btnTrendFilter;
     private TextView tvTrendIncome;
     private TextView tvTrendExpense;
     private TextView tvTrendNet;
     private TextView tvTrendNetDelta;
     private ReportTrendChartView chartTrendFlow;
+    private final List<RangeBucket> trendBuckets = new ArrayList<>();
+    private final Map<String, Double> aggregateCache = new HashMap<>();
+    private String aggregateCacheSeed = "";
 
     @Override
     protected void onDestroy() {
@@ -86,14 +91,17 @@ public class FinancialTrendActivity extends AppCompatActivity {
         setupSession();
         refreshScopeButtons();
         refreshPeriodPickerLabel();
+        refreshFilterButton();
+        setupTrendChartInteractions();
     }
 
     private void bindViews() {
         btnTrendDay = findViewById(R.id.btnTrendDay);
         btnTrendWeek = findViewById(R.id.btnTrendWeek);
         btnTrendMonth = findViewById(R.id.btnTrendMonth);
-        btnTrendQuarter = findViewById(R.id.btnTrendQuarter);
+        btnTrendYear = findViewById(R.id.btnTrendYear);
         btnTrendPeriodPicker = findViewById(R.id.btnTrendPeriodPicker);
+        btnTrendFilter = findViewById(R.id.btnTrendFilter);
         tvTrendIncome = findViewById(R.id.tvTrendIncome);
         tvTrendExpense = findViewById(R.id.tvTrendExpense);
         tvTrendNet = findViewById(R.id.tvTrendNet);
@@ -109,7 +117,7 @@ public class FinancialTrendActivity extends AppCompatActivity {
         btnTrendDay.setOnClickListener(v -> selectScope(TrendScope.DAY));
         btnTrendWeek.setOnClickListener(v -> selectScope(TrendScope.WEEK));
         btnTrendMonth.setOnClickListener(v -> selectScope(TrendScope.MONTH));
-        btnTrendQuarter.setOnClickListener(v -> selectScope(TrendScope.QUARTER));
+        btnTrendYear.setOnClickListener(v -> selectScope(TrendScope.YEAR));
     }
 
     private void selectScope(TrendScope scope) {
@@ -148,10 +156,48 @@ public class FinancialTrendActivity extends AppCompatActivity {
                 })
                 .show();
         });
+        btnTrendFilter.setOnClickListener(v -> {
+            List<Wallet> wallets = latestState == null ? new ArrayList<>() : latestState.getWallets();
+            ReportFilterDialog.show(this, wallets, reportFilter, nextFilter -> {
+                reportFilter = nextFilter;
+                refreshFilterButton();
+                if (latestState != null) {
+                    renderFinanceState(latestState);
+                }
+            });
+        });
     }
 
     private boolean samePeriodStart(ZonedDateTime first, ZonedDateTime second) {
         return first.toEpochSecond() == second.toEpochSecond();
+    }
+
+    private void setupTrendChartInteractions() {
+        chartTrendFlow.setOnEntryClickListener((index, entry) -> {
+            if (index < 0 || index >= trendBuckets.size()) {
+                return;
+            }
+            RangeBucket bucket = trendBuckets.get(index);
+            Intent intent = ReportDrilldownActivity.createIntent(
+                this,
+                getString(R.string.report_drilldown_title_with_label, bucket.label),
+                bucket.start,
+                bucket.end,
+                null,
+                reportFilter.getWalletIds(),
+                reportFilter.getTransactionTypes()
+            );
+            startActivity(intent);
+        });
+    }
+
+    private void refreshFilterButton() {
+        if (reportFilter.isAll()) {
+            btnTrendFilter.setText(R.string.action_filter);
+            return;
+        }
+        int activeGroups = (reportFilter.hasWalletFilter() ? 1 : 0) + (reportFilter.hasTypeFilter() ? 1 : 0);
+        btnTrendFilter.setText(getString(R.string.report_filter_with_count, activeGroups));
     }
 
     private List<PeriodOption> buildPeriodOptions() {
@@ -179,8 +225,8 @@ public class FinancialTrendActivity extends AppCompatActivity {
             return options;
         }
         for (int i = 0; i < 8; i++) {
-            ZonedDateTime start = startOfQuarter(now.minusMonths(i * 3L));
-            options.add(new PeriodOption(start, formatQuarterLabel(start)));
+            ZonedDateTime start = startOfYear(now.minusYears(i));
+            options.add(new PeriodOption(start, formatYearLabel(start)));
         }
         return options;
     }
@@ -189,7 +235,7 @@ public class FinancialTrendActivity extends AppCompatActivity {
         styleScopeButton(btnTrendDay, selectedScope == TrendScope.DAY);
         styleScopeButton(btnTrendWeek, selectedScope == TrendScope.WEEK);
         styleScopeButton(btnTrendMonth, selectedScope == TrendScope.MONTH);
-        styleScopeButton(btnTrendQuarter, selectedScope == TrendScope.QUARTER);
+        styleScopeButton(btnTrendYear, selectedScope == TrendScope.YEAR);
     }
 
     private void styleScopeButton(MaterialButton button, boolean selected) {
@@ -209,7 +255,7 @@ public class FinancialTrendActivity extends AppCompatActivity {
         } else if (selectedScope == TrendScope.MONTH) {
             btnTrendPeriodPicker.setText(formatMonthLabel(selectedStart));
         } else {
-            btnTrendPeriodPicker.setText(formatQuarterLabel(selectedStart));
+            btnTrendPeriodPicker.setText(formatYearLabel(selectedStart));
         }
     }
 
@@ -275,6 +321,7 @@ public class FinancialTrendActivity extends AppCompatActivity {
         BudgetAlertNotifier.maybeNotifyExceeded(this, state);
         loadLatestRateSnapshot();
         Map<String, String> walletCurrencyMap = buildWalletCurrencyMap(state.getWallets());
+        updateAggregateCacheSeed(state, walletCurrencyMap);
 
         ZonedDateTime currentStart = selectedStart;
         ZonedDateTime currentEnd = endForScope(selectedScope, currentStart);
@@ -294,6 +341,7 @@ public class FinancialTrendActivity extends AppCompatActivity {
         tvTrendIncome.setText(UiFormatters.moneyRaw(income));
         tvTrendExpense.setText(UiFormatters.moneyRaw(expense));
         tvTrendNet.setText(UiFormatters.moneyRaw(net));
+        tvTrendNet.setTextColor(getColor(net < 0.0 ? R.color.expense_red : android.R.color.white));
 
         if (Math.abs(previousNet) < 0.0001) {
             tvTrendNetDelta.setText(R.string.report_trend_no_previous);
@@ -319,6 +367,7 @@ public class FinancialTrendActivity extends AppCompatActivity {
         ZonedDateTime periodStart
     ) {
         List<ReportTrendChartView.Entry> entries = new ArrayList<>();
+        trendBuckets.clear();
         if (selectedScope == TrendScope.DAY) {
             for (int i = 0; i < 6; i++) {
                 ZonedDateTime start = periodStart.plusHours(i * 4L);
@@ -326,7 +375,9 @@ public class FinancialTrendActivity extends AppCompatActivity {
                 double income = sumInRange(transactions, start, end, TransactionType.INCOME, walletCurrencyMap);
                 double expense = sumInRange(transactions, start, end, TransactionType.EXPENSE, walletCurrencyMap)
                     + sumInRange(transactions, start, end, TransactionType.TRANSFER, walletCurrencyMap);
-                entries.add(new ReportTrendChartView.Entry(i * 4 + "h", income, expense));
+                String label = i * 4 + "h";
+                entries.add(new ReportTrendChartView.Entry(label, income, expense));
+                trendBuckets.add(new RangeBucket(label, start, end));
             }
             return entries;
         }
@@ -338,7 +389,9 @@ public class FinancialTrendActivity extends AppCompatActivity {
                 double income = sumInRange(transactions, start, end, TransactionType.INCOME, walletCurrencyMap);
                 double expense = sumInRange(transactions, start, end, TransactionType.EXPENSE, walletCurrencyMap)
                     + sumInRange(transactions, start, end, TransactionType.TRANSFER, walletCurrencyMap);
-                entries.add(new ReportTrendChartView.Entry(shortWeekday(start), income, expense));
+                String label = shortWeekday(start);
+                entries.add(new ReportTrendChartView.Entry(label, income, expense));
+                trendBuckets.add(new RangeBucket(label, start, end));
             }
             return entries;
         }
@@ -354,18 +407,22 @@ public class FinancialTrendActivity extends AppCompatActivity {
                 double income = sumInRange(transactions, start, end, TransactionType.INCOME, walletCurrencyMap);
                 double expense = sumInRange(transactions, start, end, TransactionType.EXPENSE, walletCurrencyMap)
                     + sumInRange(transactions, start, end, TransactionType.TRANSFER, walletCurrencyMap);
-                entries.add(new ReportTrendChartView.Entry(getString(R.string.report_week_short, i + 1), income, expense));
+                String label = getString(R.string.report_week_short, i + 1);
+                entries.add(new ReportTrendChartView.Entry(label, income, expense));
+                trendBuckets.add(new RangeBucket(label, start, end));
             }
             return entries;
         }
 
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 12; i++) {
             ZonedDateTime start = periodStart.plusMonths(i);
             ZonedDateTime end = start.plusMonths(1);
             double income = sumInRange(transactions, start, end, TransactionType.INCOME, walletCurrencyMap);
             double expense = sumInRange(transactions, start, end, TransactionType.EXPENSE, walletCurrencyMap)
                 + sumInRange(transactions, start, end, TransactionType.TRANSFER, walletCurrencyMap);
-            entries.add(new ReportTrendChartView.Entry(getString(R.string.report_month_short, start.getMonthValue()), income, expense));
+            String label = getString(R.string.report_month_short, start.getMonthValue());
+            entries.add(new ReportTrendChartView.Entry(label, income, expense));
+            trendBuckets.add(new RangeBucket(label, start, end));
         }
         return entries;
     }
@@ -377,9 +434,20 @@ public class FinancialTrendActivity extends AppCompatActivity {
         TransactionType type,
         Map<String, String> walletCurrencyMap
     ) {
+        if (!reportFilter.includesType(type)) {
+            return 0.0;
+        }
+        String key = "sum|" + type.name() + "|" + start.toEpochSecond() + "|" + end.toEpochSecond();
+        Double cached = aggregateCache.get(key);
+        if (cached != null) {
+            return cached;
+        }
         double total = 0.0;
         for (FinanceTransaction transaction : transactions) {
             if (transaction.getType() != type) {
+                continue;
+            }
+            if (!reportFilter.includesWallet(transaction.getWalletId())) {
                 continue;
             }
             ZonedDateTime time = Instant.ofEpochSecond(transaction.getCreatedAt().getSeconds(), transaction.getCreatedAt().getNanoseconds())
@@ -389,6 +457,7 @@ public class FinancialTrendActivity extends AppCompatActivity {
             }
             total += amountInVnd(transaction, walletCurrencyMap);
         }
+        aggregateCache.put(key, total);
         return total;
     }
 
@@ -455,7 +524,7 @@ public class FinancialTrendActivity extends AppCompatActivity {
         if (scope == TrendScope.MONTH) {
             return startOfMonth(reference);
         }
-        return startOfQuarter(reference);
+        return startOfYear(reference);
     }
 
     private ZonedDateTime previousStart(TrendScope scope, ZonedDateTime currentStart) {
@@ -468,7 +537,7 @@ public class FinancialTrendActivity extends AppCompatActivity {
         if (scope == TrendScope.MONTH) {
             return currentStart.minusMonths(1);
         }
-        return currentStart.minusMonths(3);
+        return currentStart.minusYears(1);
     }
 
     private ZonedDateTime endForScope(TrendScope scope, ZonedDateTime start) {
@@ -481,7 +550,28 @@ public class FinancialTrendActivity extends AppCompatActivity {
         if (scope == TrendScope.MONTH) {
             return start.plusMonths(1);
         }
-        return start.plusMonths(3);
+        return start.plusYears(1);
+    }
+
+    private void updateAggregateCacheSeed(FinanceUiState state, Map<String, String> walletCurrencyMap) {
+        String seed =
+            state.getTransactions().size()
+                + "|"
+                + selectedScope.name()
+                + "|"
+                + selectedStart.toEpochSecond()
+                + "|"
+                + reportFilter.getWalletIds().hashCode()
+                + "|"
+                + reportFilter.getTransactionTypes().hashCode()
+                + "|"
+                + walletCurrencyMap.hashCode()
+                + "|"
+                + (latestRateSnapshot == null ? 0 : latestRateSnapshot.hashCode());
+        if (!seed.equals(aggregateCacheSeed)) {
+            aggregateCacheSeed = seed;
+            aggregateCache.clear();
+        }
     }
 
     private String formatDayLabel(ZonedDateTime value) {
@@ -497,9 +587,8 @@ public class FinancialTrendActivity extends AppCompatActivity {
         return getString(R.string.report_month_picker_value, value.getMonthValue(), value.getYear());
     }
 
-    private String formatQuarterLabel(ZonedDateTime value) {
-        int quarter = ((value.getMonthValue() - 1) / 3) + 1;
-        return getString(R.string.report_quarter_picker_label, quarter, value.getYear());
+    private String formatYearLabel(ZonedDateTime value) {
+        return getString(R.string.report_year_picker_label, value.getYear());
     }
 
     private ZonedDateTime startOfDay(ZonedDateTime value) {
@@ -516,9 +605,8 @@ public class FinancialTrendActivity extends AppCompatActivity {
         return date.atStartOfDay(value.getZone());
     }
 
-    private ZonedDateTime startOfQuarter(ZonedDateTime value) {
-        int quarterStartMonth = ((value.getMonthValue() - 1) / 3) * 3 + 1;
-        LocalDate date = LocalDate.of(value.getYear(), quarterStartMonth, 1);
+    private ZonedDateTime startOfYear(ZonedDateTime value) {
+        LocalDate date = LocalDate.of(value.getYear(), 1, 1);
         return date.atStartOfDay(value.getZone());
     }
 
@@ -556,6 +644,18 @@ public class FinancialTrendActivity extends AppCompatActivity {
         private PeriodOption(ZonedDateTime start, String label) {
             this.start = start;
             this.label = label;
+        }
+    }
+
+    private static final class RangeBucket {
+        private final String label;
+        private final ZonedDateTime start;
+        private final ZonedDateTime end;
+
+        private RangeBucket(String label, ZonedDateTime start, ZonedDateTime end) {
+            this.label = label;
+            this.start = start;
+            this.end = end;
         }
     }
 }

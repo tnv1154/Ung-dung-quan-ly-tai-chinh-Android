@@ -117,6 +117,8 @@ public class WalletRowAdapter extends RecyclerView.Adapter<WalletRowAdapter.Wall
         } else {
             holder.tvBalance.setText(originalBalance);
         }
+        int balanceColor = wallet.getBalance() < 0.0 ? R.color.error_red : R.color.text_secondary;
+        holder.tvBalance.setTextColor(ContextCompat.getColor(holder.itemView.getContext(), balanceColor));
         holder.tvBalanceConverted.setVisibility(View.GONE);
         holder.iconContainer.setBackgroundTintList(ContextCompat.getColorStateList(
             holder.itemView.getContext(),

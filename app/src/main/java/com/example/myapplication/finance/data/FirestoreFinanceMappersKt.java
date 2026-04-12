@@ -98,7 +98,7 @@ final class FirestoreFinanceMappersKt {
         Boolean includeInReport = snapshot.getBoolean("includeInReport");
         Boolean isLocked = snapshot.getBoolean("isLocked");
         Timestamp updatedAt = snapshot.getTimestamp("updatedAt");
-        double safeBalance = balance == null ? 0.0 : Math.max(balance, 0.0);
+        double safeBalance = balance == null ? 0.0 : balance;
         return new Wallet(
             id,
             safe(snapshot.getString("name")),

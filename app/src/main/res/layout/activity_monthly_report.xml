@@ -7,10 +7,11 @@
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/layoutMonthlyTopBar"
         android:layout_width="0dp"
-        android:layout_height="64dp"
-        android:layout_marginTop="@dimen/screen_top_safe_margin"
+        android:layout_height="wrap_content"
+        android:minHeight="64dp"
         android:background="@color/card_bg"
         android:paddingStart="12dp"
+        android:paddingTop="@dimen/screen_top_safe_margin"
         android:paddingEnd="12dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -152,6 +153,15 @@
                                 android:textColor="@color/group_cash_tint"
                                 android:textSize="28sp"
                                 android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvReportOverviewIncomeDelta"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="@string/report_delta_no_previous"
+                                android:textColor="@color/group_cash_tint"
+                                android:textSize="12sp" />
                         </LinearLayout>
 
                         <LinearLayout
@@ -184,6 +194,15 @@
                                 android:textColor="@color/error_red"
                                 android:textSize="28sp"
                                 android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvReportOverviewExpenseDelta"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="@string/report_delta_no_previous"
+                                android:textColor="@color/error_red"
+                                android:textSize="12sp" />
                         </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
@@ -229,9 +248,21 @@
                             android:padding="3dp">
 
                             <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnReportOverviewWeek"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="66dp"
+                                android:layout_height="30dp"
+                                android:insetTop="0dp"
+                                android:insetBottom="0dp"
+                                android:minHeight="0dp"
+                                android:text="@string/label_period_week"
+                                android:textAllCaps="false"
+                                android:textSize="13sp" />
+
+                            <com.google.android.material.button.MaterialButton
                                 android:id="@+id/btnReportOverviewMonth"
                                 style="?attr/materialButtonOutlinedStyle"
-                                android:layout_width="72dp"
+                                android:layout_width="66dp"
                                 android:layout_height="30dp"
                                 android:insetTop="0dp"
                                 android:insetBottom="0dp"
@@ -241,17 +272,50 @@
                                 android:textSize="13sp" />
 
                             <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btnReportOverviewQuarter"
+                                android:id="@+id/btnReportOverviewYear"
                                 style="?attr/materialButtonOutlinedStyle"
-                                android:layout_width="72dp"
+                                android:layout_width="66dp"
                                 android:layout_height="30dp"
                                 android:insetTop="0dp"
                                 android:insetBottom="0dp"
                                 android:minHeight="0dp"
-                                android:text="@string/label_period_quarter"
+                                android:text="@string/label_period_year"
                                 android:textAllCaps="false"
                                 android:textSize="13sp" />
                         </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnReportOverviewPeriodPicker"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="38dp"
+                            android:layout_weight="1"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:minHeight="0dp"
+                            android:textAllCaps="false"
+                            android:textSize="14sp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnReportOverviewFilter"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="38dp"
+                            android:layout_marginStart="8dp"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:minHeight="0dp"
+                            android:text="@string/action_filter"
+                            android:textAllCaps="false"
+                            android:textSize="14sp" />
                     </LinearLayout>
 
                     <com.example.myapplication.xmlui.views.ReportGroupedBarChartView

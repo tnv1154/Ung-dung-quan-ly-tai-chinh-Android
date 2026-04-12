@@ -6,6 +6,7 @@ import android.content.SharedPreferences;
 import com.example.myapplication.R;
 import com.example.myapplication.finance.model.BudgetLimit;
 import com.example.myapplication.finance.ui.FinanceUiState;
+import com.example.myapplication.xmlui.CategoryFallbackMerger;
 import com.example.myapplication.xmlui.budget.BudgetCycleUtils;
 
 import java.time.LocalDate;
@@ -25,13 +26,18 @@ public final class BudgetAlertNotifier {
     }
 
     public static void maybeNotifyExceeded(Context context, FinanceUiState state) {
-        if (context == null || state == null || !state.getSettings().getShowBudgetWarnings()) {
+        if (context == null || state == null) {
             return;
         }
-        SharedPreferences preferences = context.getApplicationContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        Context appContext = context.getApplicationContext();
+        MonthlyReportNotifier.maybeNotifyMonthlyReport(appContext);
+        if (!state.getSettings().getShowBudgetWarnings()) {
+            return;
+        }
+        SharedPreferences preferences = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         Set<String> notifiedKeys = parseCsv(preferences.getString(KEY_EXCEEDED, ""));
         boolean updated = false;
-        for (BudgetUsage usage : collectActiveBudgetUsage(context, state)) {
+        for (BudgetUsage usage : collectActiveBudgetUsage(appContext, state)) {
             if (usage.ratio < 1.0) {
                 continue;
             }
@@ -40,7 +46,7 @@ public final class BudgetAlertNotifier {
                 continue;
             }
             AppNotificationCenter.notifyBudgetExceeded(
-                context.getApplicationContext(),
+                appContext,
                 usage.displayName,
                 usage.spent,
                 usage.limit
@@ -51,13 +57,27 @@ public final class BudgetAlertNotifier {
         if (updated) {
             preferences.edit().putString(KEY_EXCEEDED, String.join(",", notifiedKeys)).apply();
         }
+        maybeNotifyNearLimitInternal(appContext, state, preferences);
     }
 
     public static void maybeNotifyNearLimit(Context context, FinanceUiState state) {
-        if (context == null || state == null || !state.getSettings().getShowBudgetWarnings()) {
+        if (context == null || state == null) {
             return;
         }
-        SharedPreferences preferences = context.getApplicationContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        Context appContext = context.getApplicationContext();
+        MonthlyReportNotifier.maybeNotifyMonthlyReport(appContext);
+        if (!state.getSettings().getShowBudgetWarnings()) {
+            return;
+        }
+        SharedPreferences preferences = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        maybeNotifyNearLimitInternal(appContext, state, preferences);
+    }
+
+    private static void maybeNotifyNearLimitInternal(
+        Context context,
+        FinanceUiState state,
+        SharedPreferences preferences
+    ) {
         Set<String> notifiedKeys = parseCsv(preferences.getString(KEY_WARNING, ""));
         boolean updated = false;
         for (BudgetUsage usage : collectActiveBudgetUsage(context, state)) {
@@ -112,6 +132,7 @@ public final class BudgetAlertNotifier {
             double spent = BudgetCycleUtils.calculateSpentInWindow(
                 budget,
                 state.getTransactions(),
+                CategoryFallbackMerger.mergeWithFallbacks(state.getCategories()),
                 zoneId,
                 window.getStart(),
                 window.getEnd()

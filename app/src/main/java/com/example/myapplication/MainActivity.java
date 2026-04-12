@@ -103,6 +103,14 @@ public class MainActivity extends AppCompatActivity {
         setupSession();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (financeViewModel != null) {
+            financeViewModel.refreshRealtimeSync();
+        }
+    }
+
     private void bindViews() {
         tvTotalAssets = findViewById(R.id.tvTotalAssets);
         tvEmptyState = findViewById(R.id.tvEmptyState);
@@ -300,6 +308,7 @@ public class MainActivity extends AppCompatActivity {
         boolean noWallets = state.getWallets().isEmpty();
         tvEmptyState.setVisibility(noWallets ? View.VISIBLE : View.GONE);
         tvTotalAssets.setText(formatMoney(totalAssets));
+        tvTotalAssets.setTextColor(getColor(totalAssets < 0.0 ? R.color.error_red : R.color.blue_primary));
     }
 
     @Override

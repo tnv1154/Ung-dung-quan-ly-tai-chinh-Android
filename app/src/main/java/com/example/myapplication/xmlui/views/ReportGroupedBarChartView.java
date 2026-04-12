@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.util.AttributeSet;
+import android.view.MotionEvent;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -30,6 +31,27 @@ public class ReportGroupedBarChartView extends View {
             this.expense = Math.max(0.0, expense);
             this.highlighted = highlighted;
         }
+
+        @NonNull
+        public String getLabel() {
+            return label;
+        }
+
+        public double getIncome() {
+            return income;
+        }
+
+        public double getExpense() {
+            return expense;
+        }
+
+        public boolean isHighlighted() {
+            return highlighted;
+        }
+    }
+
+    public interface OnEntryClickListener {
+        void onEntryClick(int index, @NonNull Entry entry);
     }
 
     private final Paint gridPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -39,6 +61,8 @@ public class ReportGroupedBarChartView extends View {
     private final RectF barRect = new RectF();
 
     private final List<Entry> entries = new ArrayList<>();
+    @Nullable
+    private OnEntryClickListener onEntryClickListener;
 
     public ReportGroupedBarChartView(Context context) {
         super(context);
@@ -75,6 +99,10 @@ public class ReportGroupedBarChartView extends View {
             entries.addAll(values);
         }
         invalidate();
+    }
+
+    public void setOnEntryClickListener(@Nullable OnEntryClickListener listener) {
+        this.onEntryClickListener = listener;
     }
 
     @Override
@@ -155,5 +183,35 @@ public class ReportGroupedBarChartView extends View {
 
     private float dp(float value) {
         return value * getResources().getDisplayMetrics().density;
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (onEntryClickListener == null || entries.isEmpty()) {
+            return super.onTouchEvent(event);
+        }
+        if (event.getAction() != MotionEvent.ACTION_UP) {
+            return true;
+        }
+        float left = getPaddingLeft() + dp(8f);
+        float right = getWidth() - getPaddingRight() - dp(8f);
+        if (right <= left) {
+            return true;
+        }
+        float x = event.getX();
+        if (x < left || x > right) {
+            return true;
+        }
+        float groupWidth = (right - left) / entries.size();
+        int index = Math.min(entries.size() - 1, Math.max(0, (int) ((x - left) / groupWidth)));
+        onEntryClickListener.onEntryClick(index, entries.get(index));
+        performClick();
+        return true;
+    }
+
+    @Override
+    public boolean performClick() {
+        super.performClick();
+        return true;
     }
 }

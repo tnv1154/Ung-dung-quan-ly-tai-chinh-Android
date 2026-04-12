@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rowBudgetCategoryItem"
+    android:layout_width="match_parent"
+    android:layout_height="64dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp">
+
+    <View
+        android:id="@+id/vBudgetCategoryIndent"
+        android:layout_width="0dp"
+        android:layout_height="1dp" />
+
+    <FrameLayout
+        android:id="@+id/layoutBudgetCategoryIcon"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@drawable/bg_wallet_round_icon">
+
+        <ImageView
+            android:id="@+id/ivBudgetCategoryIcon"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_gravity="center"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_category_dot" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/tvBudgetCategoryName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:maxLines="1"
+        android:textColor="@color/text_primary"
+        android:textSize="17sp" />
+
+    <ImageView
+        android:id="@+id/ivBudgetCategoryChecked"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:background="@drawable/bg_budget_check_unselected"
+        android:contentDescription="@null" />
+
+</LinearLayout>

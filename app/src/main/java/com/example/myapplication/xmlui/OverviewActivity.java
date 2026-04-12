@@ -133,6 +133,9 @@ public class OverviewActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (financeViewModel != null) {
+            financeViewModel.refreshRealtimeSync();
+        }
         updateGreetingSubtitle();
         greetingHandler.removeCallbacks(greetingTicker);
         greetingHandler.post(greetingTicker);
@@ -225,6 +228,7 @@ public class OverviewActivity extends AppCompatActivity {
         }
         tvGreetingTitle.setText(getString(R.string.overview_greeting_title, normalizeDisplayName(displayName)));
         tvTotalBalance.setText(UiFormatters.money(totalBalance));
+        tvTotalBalance.setTextColor(getColor(totalBalance < 0.0 ? R.color.expense_red : android.R.color.white));
         String currency = displayState.getSettings().getCurrency();
         if (currency == null || currency.trim().isEmpty()) {
             currency = getString(R.string.overview_currency_chip);
@@ -287,6 +291,7 @@ public class OverviewActivity extends AppCompatActivity {
             double spent = BudgetCycleUtils.calculateSpentInWindow(
                 budget,
                 state.getTransactions(),
+                CategoryFallbackMerger.mergeWithFallbacks(state.getCategories()),
                 zoneId,
                 window.getStart(),
                 window.getEnd()

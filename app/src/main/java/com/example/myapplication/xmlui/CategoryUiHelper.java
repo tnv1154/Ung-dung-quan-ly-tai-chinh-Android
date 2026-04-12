@@ -116,6 +116,44 @@ public final class CategoryUiHelper {
         }
     }
 
+    public static String inferIconKeyFromCategoryName(String categoryName, TransactionType type) {
+        String normalized = normalize(categoryName);
+        if (normalized.isEmpty()) {
+            if (type == TransactionType.INCOME) {
+                return "money_in";
+            }
+            if (type == TransactionType.TRANSFER) {
+                return "money_out";
+            }
+            return "other";
+        }
+        if (containsAny(normalized, "an uong", "an", "cho", "sieu thi", "food", "restaurant", "do an")) {
+            return "food";
+        }
+        if (containsAny(normalized, "di lai", "di chuyen", "xang", "xe", "taxi", "bus", "transport")) {
+            return "transport";
+        }
+        if (containsAny(normalized, "dien", "nuoc", "internet", "dien thoai", "phone", "utility")) {
+            return "utility";
+        }
+        if (containsAny(normalized, "suc khoe", "benh", "thuoc", "hospital", "health")) {
+            return "health";
+        }
+        if (containsAny(normalized, "nha", "thue", "home", "furniture")) {
+            return "home";
+        }
+        if (containsAny(normalized, "qua", "tang", "gift", "wedding")) {
+            return "gift";
+        }
+        if (type == TransactionType.INCOME) {
+            return "money_in";
+        }
+        if (type == TransactionType.TRANSFER) {
+            return "money_out";
+        }
+        return "other";
+    }
+
     @DrawableRes
     public static int iconResForCategory(TransactionCategory category) {
         if (category == null) {
@@ -242,5 +280,17 @@ public final class CategoryUiHelper {
             .replaceAll("\\p{M}+", "")
             .toLowerCase(Locale.ROOT)
             .trim();
+    }
+
+    private static boolean containsAny(String value, String... tokens) {
+        if (value == null || value.isEmpty() || tokens == null || tokens.length == 0) {
+            return false;
+        }
+        for (String token : tokens) {
+            if (token != null && !token.isEmpty() && value.contains(token)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -5,7 +5,6 @@ import android.app.TimePickerDialog;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -19,7 +18,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.ViewModelProvider;
@@ -27,22 +25,20 @@ import androidx.lifecycle.ViewModelProvider;
 import com.example.myapplication.MainActivity;
 import com.example.myapplication.R;
 import com.example.myapplication.finance.data.FirestoreFinanceRepository;
-import com.example.myapplication.finance.model.CsvImportRow;
 import com.example.myapplication.finance.model.TransactionCategory;
 import com.example.myapplication.finance.model.TransactionType;
 import com.example.myapplication.finance.model.UserSettings;
 import com.example.myapplication.finance.model.Wallet;
-import com.example.myapplication.finance.ui.CsvParseResult;
-import com.example.myapplication.finance.ui.ExportPeriod;
 import com.example.myapplication.finance.ui.FinanceParsersKt;
-import com.example.myapplication.finance.ui.FinanceTimeAndIoKt;
 import com.example.myapplication.finance.ui.FinanceUiState;
 import com.example.myapplication.finance.ui.FinanceViewModel;
 import com.example.myapplication.finance.ui.FinanceViewModelFactory;
 import com.example.myapplication.finance.ui.NotificationDraft;
 import com.example.myapplication.finance.ui.SessionUiState;
 import com.example.myapplication.finance.ui.SessionViewModel;
+import com.example.myapplication.xmlui.notifications.AppNotificationCenter;
 import com.example.myapplication.xmlui.notifications.BudgetAlertNotifier;
+import com.example.myapplication.xmlui.notifications.MonthlyReportNotifier;
 import com.example.myapplication.xmlui.notifications.ReminderScheduler;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.button.MaterialButton;
@@ -52,7 +48,6 @@ import com.google.android.material.textfield.TextInputEditText;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -76,14 +71,13 @@ public class MoreActivity extends AppCompatActivity {
     private Wallet selectedAutoWallet;
     private NotificationDraft autoDraft;
 
-    private static final int REQUEST_PICK_IMPORT = 1001;
-    private static final int REQUEST_PICK_EXPORT = 1002;
     private static final int REQUEST_POST_NOTIFICATIONS = 1003;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_more);
+        applyHeaderStatusBarStyle();
         bindViews();
         setupBottomNavigation();
         setupActions();
@@ -105,6 +99,18 @@ public class MoreActivity extends AppCompatActivity {
         tvNotificationStatus = findViewById(R.id.tvNotificationAccessStatus);
         etAutoText = findViewById(R.id.etAutoEntryText);
         btnAutoWallet = findViewById(R.id.btnAutoEntryWallet);
+    }
+
+    private void applyHeaderStatusBarStyle() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            getWindow().setStatusBarColor(getColor(R.color.blue_primary));
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            View decorView = getWindow().getDecorView();
+            int flags = decorView.getSystemUiVisibility();
+            flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            decorView.setSystemUiVisibility(flags);
+        }
     }
 
     private void setupBottomNavigation() {
@@ -164,15 +170,9 @@ public class MoreActivity extends AppCompatActivity {
         btnSettings.setOnClickListener(v -> showSettingsDialog());
         btnDataSettings.setOnClickListener(v -> startActivity(new Intent(this, DataSettingsActivity.class)));
         btnImport.setOnClickListener(v -> startActivity(new Intent(this, CsvImportActivity.class)));
-        btnExport.setOnClickListener(v -> showExportOptionsDialog());
+        btnExport.setOnClickListener(v -> startActivity(new Intent(this, ExportDataActivity.class)));
         btnCurrencyConverter.setOnClickListener(v -> startActivity(new Intent(this, CurrencyConverterActivity.class)));
-        btnAutoEntry.setOnClickListener(v -> {
-            if (autoEntryPanel.getVisibility() == View.VISIBLE) {
-                autoEntryPanel.setVisibility(View.GONE);
-            } else {
-                autoEntryPanel.setVisibility(View.VISIBLE);
-            }
-        });
+        btnAutoEntry.setOnClickListener(v -> startActivity(new Intent(this, AutoEntryActivity.class)));
         btnOpenNotificationAccess.setOnClickListener(v -> openNotificationAccessSettings());
         btnLoadLatestNotification.setOnClickListener(v -> loadLatestCapturedNotification());
         btnAutoWallet.setOnClickListener(v -> chooseAutoWallet());
@@ -357,6 +357,7 @@ public class MoreActivity extends AppCompatActivity {
         }
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_notification_settings, null, false);
         CheckBox cbBudget = dialogView.findViewById(R.id.cbNotificationBudgetExceeded);
+        CheckBox cbMonthlyReport = dialogView.findViewById(R.id.cbNotificationMonthlyReport);
         CheckBox cbReminder = dialogView.findViewById(R.id.cbNotificationReminderEnabled);
         RadioGroup rgReminderMode = dialogView.findViewById(R.id.rgNotificationReminderMode);
         RadioButton rbDaily = dialogView.findViewById(R.id.rbNotificationReminderDaily);
@@ -372,6 +373,7 @@ public class MoreActivity extends AppCompatActivity {
         Collections.sort(reminderDays);
 
         cbBudget.setChecked(settings.getShowBudgetWarnings());
+        cbMonthlyReport.setChecked(AppNotificationCenter.isMonthlyReportEnabled(this));
         cbReminder.setChecked(settings.getReminderEnabled());
         if (UserSettings.REMINDER_FREQUENCY_WEEKLY.equals(settings.getReminderFrequency())) {
             rbWeekly.setChecked(true);
@@ -420,6 +422,11 @@ public class MoreActivity extends AppCompatActivity {
                     return;
                 }
                 requestNotificationPermissionIfNeeded();
+                boolean monthlyReportEnabled = cbMonthlyReport.isChecked();
+                AppNotificationCenter.setMonthlyReportEnabled(this, monthlyReportEnabled);
+                if (monthlyReportEnabled) {
+                    MonthlyReportNotifier.maybeNotifyMonthlyReport(this);
+                }
                 String reminderFrequency = weekly
                     ? UserSettings.REMINDER_FREQUENCY_WEEKLY
                     : UserSettings.REMINDER_FREQUENCY_DAILY;
@@ -709,143 +716,6 @@ public class MoreActivity extends AppCompatActivity {
             }
         }
         return false;
-    }
-
-    private void pickCsvForImport() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("text/*");
-        startActivityForResult(intent, REQUEST_PICK_IMPORT);
-    }
-
-    private void showExportOptionsDialog() {
-        if (latestState == null || latestState.getWallets().isEmpty()) {
-            showError(getString(R.string.error_wallet_unavailable));
-            return;
-        }
-
-        ExportPeriod[] periods = new ExportPeriod[] {
-            ExportPeriod.TODAY,
-            ExportPeriod.THIS_WEEK,
-            ExportPeriod.THIS_MONTH,
-            ExportPeriod.THIS_QUARTER,
-            ExportPeriod.ALL
-        };
-        String[] labels = new String[] {
-            getString(R.string.label_period_day),
-            getString(R.string.label_period_week),
-            getString(R.string.label_period_month),
-            getString(R.string.label_period_quarter),
-            getString(R.string.label_period_all)
-        };
-        new MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.dialog_export_period_title)
-            .setItems(labels, (dialog, which) -> showWalletSelectionDialog(periods[which]))
-            .show();
-    }
-
-    private void showWalletSelectionDialog(ExportPeriod period) {
-        List<Wallet> wallets = latestState.getWallets();
-        String[] walletNames = new String[wallets.size()];
-        boolean[] checked = new boolean[wallets.size()];
-        for (int i = 0; i < wallets.size(); i++) {
-            walletNames[i] = wallets.get(i).getName();
-            checked[i] = true;
-        }
-        new MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.dialog_export_wallet_title)
-            .setMultiChoiceItems(walletNames, checked, (dialog, which, isChecked) -> checked[which] = isChecked)
-            .setNegativeButton(R.string.action_cancel, null)
-            .setPositiveButton(R.string.action_export, (dialog, which) -> {
-                Set<String> selected = new LinkedHashSet<>();
-                for (int i = 0; i < checked.length; i++) {
-                    if (checked[i]) {
-                        selected.add(wallets.get(i).getId());
-                    }
-                }
-                if (selected.isEmpty()) {
-                    showError(getString(R.string.error_export_wallet_required));
-                    return;
-                }
-                requestExport(period, selected);
-            })
-            .show();
-    }
-
-    private void requestExport(ExportPeriod period, Set<String> walletIds) {
-        pendingExportPeriod = period;
-        pendingExportWalletIds = new LinkedHashSet<>(walletIds);
-        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("text/csv");
-        intent.putExtra(Intent.EXTRA_TITLE, "finance-export.csv");
-        startActivityForResult(intent, REQUEST_PICK_EXPORT);
-    }
-
-    private ExportPeriod pendingExportPeriod = ExportPeriod.ALL;
-    private Set<String> pendingExportWalletIds = new LinkedHashSet<>();
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
-            return;
-        }
-        Uri uri = data.getData();
-        if (requestCode == REQUEST_PICK_IMPORT) {
-            importCsv(uri);
-        } else if (requestCode == REQUEST_PICK_EXPORT) {
-            exportCsv(uri);
-        }
-    }
-
-    private void importCsv(Uri uri) {
-        if (financeViewModel == null) {
-            return;
-        }
-        String raw = FinanceTimeAndIoKt.readTextFromUri(this, uri);
-        if (raw == null || raw.trim().isEmpty()) {
-            showError(getString(R.string.error_unknown));
-            return;
-        }
-        CsvParseResult parsed = FinanceParsersKt.parseCsvImportRows(raw);
-        List<CsvImportRow> rows = parsed.getRows();
-        if (rows.isEmpty()) {
-            showError(getString(R.string.message_csv_import_ready, 0, parsed.getSkippedRows()));
-            return;
-        }
-        financeViewModel.importCsvRows(rows);
-        Toast.makeText(
-            this,
-            getString(R.string.message_csv_import_ready, rows.size(), parsed.getSkippedRows()),
-            Toast.LENGTH_LONG
-        ).show();
-    }
-
-    private void exportCsv(Uri uri) {
-        if (financeViewModel == null) {
-            return;
-        }
-        Set<String> walletIds = pendingExportWalletIds.isEmpty()
-            ? buildAllWalletIds()
-            : pendingExportWalletIds;
-        String csv = financeViewModel.buildCsvExport(pendingExportPeriod, walletIds);
-        boolean success = FinanceTimeAndIoKt.writeTextToUri(this, uri, csv);
-        if (success) {
-            Toast.makeText(this, R.string.message_csv_export_success, Toast.LENGTH_SHORT).show();
-        } else {
-            showError(getString(R.string.message_csv_export_failed));
-        }
-    }
-
-    private Set<String> buildAllWalletIds() {
-        Set<String> walletIds = new LinkedHashSet<>();
-        if (latestState != null) {
-            for (Wallet wallet : latestState.getWallets()) {
-                walletIds.add(wallet.getId());
-            }
-        }
-        return walletIds;
     }
 
     private void showSignOutDialog() {

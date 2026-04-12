@@ -1,6 +1,7 @@
 package com.example.myapplication.xmlui;
 
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -41,16 +42,21 @@ import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.temporal.WeekFields;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class CategoryAnalysisActivity extends AppCompatActivity {
+
+    private enum CategoryScope { WEEK, MONTH, YEAR }
 
     private SessionViewModel sessionViewModel;
     private FinanceViewModel financeViewModel;
@@ -59,9 +65,17 @@ public class CategoryAnalysisActivity extends AppCompatActivity {
     private ExchangeRateSnapshot latestRateSnapshot;
     private final ExecutorService rateExecutor = Executors.newSingleThreadExecutor();
 
-    private YearMonth selectedMonth = YearMonth.now();
+    private CategoryScope selectedScope = CategoryScope.MONTH;
+    private ZonedDateTime selectedStart = startOfMonth(ZonedDateTime.now());
+    private ReportFilterState reportFilter = ReportFilterState.all();
+    private ZonedDateTime currentRangeStart;
+    private ZonedDateTime currentRangeEnd;
 
+    private MaterialButton btnCategoryScopeWeek;
+    private MaterialButton btnCategoryScopeMonth;
+    private MaterialButton btnCategoryScopeYear;
     private MaterialButton btnCategoryMonthPicker;
+    private MaterialButton btnCategoryFilter;
     private TextView tvCategoryAnalysisTotal;
     private TextView tvCategoryCenterPercent;
     private TextView tvCategoryCenterName;
@@ -69,6 +83,9 @@ public class CategoryAnalysisActivity extends AppCompatActivity {
     private LinearLayout layoutCategoryLegend;
     private ReportDonutChartView chartCategoryDonut;
     private ReportCategoryAdapter categoryAdapter;
+    private final List<String> donutCategories = new ArrayList<>();
+    private final Map<String, Double> amountCache = new HashMap<>();
+    private String amountCacheSeed = "";
 
     @Override
     protected void onDestroy() {
@@ -82,15 +99,23 @@ public class CategoryAnalysisActivity extends AppCompatActivity {
         setContentView(R.layout.activity_category_analysis);
         bindViews();
         setupTopBar();
-        setupMonthPicker();
+        setupScopeActions();
+        setupPeriodPicker();
         setupCategoryList();
         setupBottomNavigation();
         setupSession();
-        refreshMonthLabel();
+        refreshScopeButtons();
+        refreshPeriodLabel();
+        refreshFilterButton();
+        setupChartInteractions();
     }
 
     private void bindViews() {
+        btnCategoryScopeWeek = findViewById(R.id.btnCategoryScopeWeek);
+        btnCategoryScopeMonth = findViewById(R.id.btnCategoryScopeMonth);
+        btnCategoryScopeYear = findViewById(R.id.btnCategoryScopeYear);
         btnCategoryMonthPicker = findViewById(R.id.btnCategoryMonthPicker);
+        btnCategoryFilter = findViewById(R.id.btnCategoryFilter);
         tvCategoryAnalysisTotal = findViewById(R.id.tvCategoryAnalysisTotal);
         tvCategoryCenterPercent = findViewById(R.id.tvCategoryCenterPercent);
         tvCategoryCenterName = findViewById(R.id.tvCategoryCenterName);
@@ -103,23 +128,29 @@ public class CategoryAnalysisActivity extends AppCompatActivity {
         findViewById(R.id.btnCategoryBack).setOnClickListener(v -> finish());
     }
 
-    private void setupMonthPicker() {
+    private void setupScopeActions() {
+        btnCategoryScopeWeek.setOnClickListener(v -> selectScope(CategoryScope.WEEK));
+        btnCategoryScopeMonth.setOnClickListener(v -> selectScope(CategoryScope.MONTH));
+        btnCategoryScopeYear.setOnClickListener(v -> selectScope(CategoryScope.YEAR));
+    }
+
+    private void setupPeriodPicker() {
         btnCategoryMonthPicker.setOnClickListener(v -> {
-            List<YearMonth> options = buildMonthOptions();
+            List<PeriodOption> options = buildPeriodOptions();
             String[] labels = new String[options.size()];
             int checked = 0;
             for (int i = 0; i < options.size(); i++) {
-                YearMonth option = options.get(i);
-                labels[i] = getString(R.string.report_month_picker_label, option.getMonthValue(), option.getYear());
-                if (option.equals(selectedMonth)) {
+                PeriodOption option = options.get(i);
+                labels[i] = option.label;
+                if (samePeriodStart(option.start, selectedStart)) {
                     checked = i;
                 }
             }
             new MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.report_choose_month_title)
+                .setTitle(R.string.report_choose_period_title)
                 .setSingleChoiceItems(labels, checked, (dialog, which) -> {
-                    selectedMonth = options.get(which);
-                    refreshMonthLabel();
+                    selectedStart = options.get(which).start;
+                    refreshPeriodLabel();
                     if (latestState != null) {
                         renderFinanceState(latestState);
                     }
@@ -127,21 +158,111 @@ public class CategoryAnalysisActivity extends AppCompatActivity {
                 })
                 .show();
         });
+        btnCategoryFilter.setOnClickListener(v -> {
+            List<Wallet> wallets = latestState == null ? new ArrayList<>() : latestState.getWallets();
+            ReportFilterDialog.show(this, wallets, reportFilter, nextFilter -> {
+                reportFilter = nextFilter;
+                refreshFilterButton();
+                if (latestState != null) {
+                    renderFinanceState(latestState);
+                }
+            });
+        });
     }
 
-    private List<YearMonth> buildMonthOptions() {
-        List<YearMonth> values = new ArrayList<>();
-        YearMonth now = YearMonth.now();
-        for (int i = 0; i < 24; i++) {
-            values.add(now.minusMonths(i));
+    private void setupChartInteractions() {
+        chartCategoryDonut.setOnSegmentClickListener((index, value) -> {
+            if (index < 0 || index >= donutCategories.size() || currentRangeStart == null || currentRangeEnd == null) {
+                return;
+            }
+            Set<TransactionType> types = new LinkedHashSet<>();
+            types.add(TransactionType.EXPENSE);
+            Intent intent = ReportDrilldownActivity.createIntent(
+                this,
+                getString(R.string.report_drilldown_title_with_label, donutCategories.get(index)),
+                currentRangeStart,
+                currentRangeEnd,
+                donutCategories.get(index),
+                reportFilter.getWalletIds(),
+                types
+            );
+            startActivity(intent);
+        });
+    }
+
+    private List<PeriodOption> buildPeriodOptions() {
+        List<PeriodOption> options = new ArrayList<>();
+        ZonedDateTime now = ZonedDateTime.now();
+        if (selectedScope == CategoryScope.WEEK) {
+            for (int i = 0; i < 24; i++) {
+                ZonedDateTime start = startOfWeek(now.minusWeeks(i));
+                options.add(new PeriodOption(start, formatWeekLabel(start)));
+            }
+            return options;
         }
-        return values;
+        if (selectedScope == CategoryScope.MONTH) {
+            for (int i = 0; i < 24; i++) {
+                ZonedDateTime start = startOfMonth(now.minusMonths(i));
+                options.add(new PeriodOption(start, formatMonthLabel(start)));
+            }
+            return options;
+        }
+        for (int i = 0; i < 10; i++) {
+            ZonedDateTime start = startOfYear(now.minusYears(i));
+            options.add(new PeriodOption(start, formatYearLabel(start)));
+        }
+        return options;
     }
 
-    private void refreshMonthLabel() {
-        btnCategoryMonthPicker.setText(
-            getString(R.string.report_month_picker_value, selectedMonth.getMonthValue(), selectedMonth.getYear())
-        );
+    private void selectScope(CategoryScope scope) {
+        if (selectedScope == scope) {
+            return;
+        }
+        selectedScope = scope;
+        selectedStart = startForScope(scope, ZonedDateTime.now());
+        refreshScopeButtons();
+        refreshPeriodLabel();
+        if (latestState != null) {
+            renderFinanceState(latestState);
+        }
+    }
+
+    private void refreshScopeButtons() {
+        styleScopeButton(btnCategoryScopeWeek, selectedScope == CategoryScope.WEEK);
+        styleScopeButton(btnCategoryScopeMonth, selectedScope == CategoryScope.MONTH);
+        styleScopeButton(btnCategoryScopeYear, selectedScope == CategoryScope.YEAR);
+    }
+
+    private void styleScopeButton(MaterialButton button, boolean selected) {
+        int fill = selected ? R.color.card_bg : android.R.color.transparent;
+        int text = selected ? R.color.blue_primary : R.color.text_secondary;
+        int stroke = R.color.divider;
+        button.setBackgroundTintList(ColorStateList.valueOf(getColor(fill)));
+        button.setStrokeColor(ColorStateList.valueOf(getColor(stroke)));
+        button.setTextColor(getColor(text));
+    }
+
+    private void refreshPeriodLabel() {
+        if (selectedScope == CategoryScope.WEEK) {
+            btnCategoryMonthPicker.setText(formatWeekLabel(selectedStart));
+        } else if (selectedScope == CategoryScope.MONTH) {
+            btnCategoryMonthPicker.setText(formatMonthLabel(selectedStart));
+        } else {
+            btnCategoryMonthPicker.setText(formatYearLabel(selectedStart));
+        }
+    }
+
+    private boolean samePeriodStart(ZonedDateTime first, ZonedDateTime second) {
+        return first.toEpochSecond() == second.toEpochSecond();
+    }
+
+    private void refreshFilterButton() {
+        if (reportFilter.isAll()) {
+            btnCategoryFilter.setText(R.string.action_filter);
+            return;
+        }
+        int activeGroups = (reportFilter.hasWalletFilter() ? 1 : 0) + (reportFilter.hasTypeFilter() ? 1 : 0);
+        btnCategoryFilter.setText(getString(R.string.report_filter_with_count, activeGroups));
     }
 
     private void setupCategoryList() {
@@ -214,6 +335,11 @@ public class CategoryAnalysisActivity extends AppCompatActivity {
         BudgetAlertNotifier.maybeNotifyExceeded(this, state);
         loadLatestRateSnapshot();
         Map<String, String> walletCurrencyMap = buildWalletCurrencyMap(state.getWallets());
+        updateAmountCacheSeed(state, walletCurrencyMap);
+        ZonedDateTime rangeStart = selectedStart;
+        ZonedDateTime rangeEnd = endForScope(selectedScope, selectedStart);
+        currentRangeStart = rangeStart;
+        currentRangeEnd = rangeEnd;
 
         Map<String, CategoryBucket> grouped = new HashMap<>();
         double totalExpense = 0.0;
@@ -221,10 +347,15 @@ public class CategoryAnalysisActivity extends AppCompatActivity {
             if (transaction.getType() != TransactionType.EXPENSE) {
                 continue;
             }
+            if (!reportFilter.includesType(TransactionType.EXPENSE)) {
+                continue;
+            }
+            if (!reportFilter.includesWallet(transaction.getWalletId())) {
+                continue;
+            }
             ZonedDateTime time = Instant.ofEpochSecond(transaction.getCreatedAt().getSeconds(), transaction.getCreatedAt().getNanoseconds())
                 .atZone(ZoneId.systemDefault());
-            YearMonth txMonth = YearMonth.of(time.getYear(), time.getMonthValue());
-            if (!txMonth.equals(selectedMonth)) {
+            if (time.isBefore(rangeStart) || !time.isBefore(rangeEnd)) {
                 continue;
             }
             String categoryName = safeCategoryName(transaction.getCategory());
@@ -246,6 +377,7 @@ public class CategoryAnalysisActivity extends AppCompatActivity {
         List<Float> donutValues = new ArrayList<>();
         List<Integer> donutColors = new ArrayList<>();
         List<UiReportCategory> uiItems = new ArrayList<>();
+        donutCategories.clear();
 
         for (int i = 0; i < sorted.size(); i++) {
             CategoryBucket bucket = sorted.get(i);
@@ -265,6 +397,7 @@ public class CategoryAnalysisActivity extends AppCompatActivity {
             ));
             donutValues.add((float) bucket.amount);
             donutColors.add(chartColor);
+            donutCategories.add(bucket.name);
         }
 
         tvCategoryAnalysisTotal.setText(UiFormatters.moneyRaw(totalExpense));
@@ -362,6 +495,53 @@ public class CategoryAnalysisActivity extends AppCompatActivity {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
+    private ZonedDateTime startForScope(CategoryScope scope, ZonedDateTime reference) {
+        if (scope == CategoryScope.WEEK) {
+            return startOfWeek(reference);
+        }
+        if (scope == CategoryScope.MONTH) {
+            return startOfMonth(reference);
+        }
+        return startOfYear(reference);
+    }
+
+    private ZonedDateTime endForScope(CategoryScope scope, ZonedDateTime start) {
+        if (scope == CategoryScope.WEEK) {
+            return start.plusWeeks(1);
+        }
+        if (scope == CategoryScope.MONTH) {
+            return start.plusMonths(1);
+        }
+        return start.plusYears(1);
+    }
+
+    private ZonedDateTime startOfWeek(ZonedDateTime value) {
+        int day = value.getDayOfWeek().getValue();
+        return value.minusDays(day - 1L).toLocalDate().atStartOfDay(value.getZone());
+    }
+
+    private ZonedDateTime startOfMonth(ZonedDateTime value) {
+        YearMonth month = YearMonth.of(value.getYear(), value.getMonthValue());
+        return month.atDay(1).atStartOfDay(value.getZone());
+    }
+
+    private ZonedDateTime startOfYear(ZonedDateTime value) {
+        return value.withDayOfYear(1).toLocalDate().atStartOfDay(value.getZone());
+    }
+
+    private String formatWeekLabel(ZonedDateTime value) {
+        int week = value.get(WeekFields.ISO.weekOfWeekBasedYear());
+        return getString(R.string.report_week_picker_label, week, value.getYear());
+    }
+
+    private String formatMonthLabel(ZonedDateTime value) {
+        return getString(R.string.report_month_picker_value, value.getMonthValue(), value.getYear());
+    }
+
+    private String formatYearLabel(ZonedDateTime value) {
+        return getString(R.string.report_year_picker_label, value.getYear());
+    }
+
     private void goToAuth() {
         Intent intent = new Intent(this, AuthActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
@@ -379,8 +559,15 @@ public class CategoryAnalysisActivity extends AppCompatActivity {
 
     private double amountInVnd(FinanceTransaction transaction, Map<String, String> walletCurrencyMap) {
         String currency = resolveTransactionCurrency(transaction, walletCurrencyMap);
+        String key = transaction.getId() + "|" + currency;
+        Double cached = amountCache.get(key);
+        if (cached != null) {
+            return cached;
+        }
         Double converted = CurrencyRateUtils.convert(transaction.getAmount(), currency, "VND", latestRateSnapshot);
-        return converted == null ? 0.0 : converted;
+        double value = converted == null ? 0.0 : converted;
+        amountCache.put(key, value);
+        return value;
     }
 
     private String resolveTransactionCurrency(FinanceTransaction transaction, Map<String, String> walletCurrencyMap) {
@@ -390,6 +577,27 @@ public class CategoryAnalysisActivity extends AppCompatActivity {
         }
         String walletCurrency = walletCurrencyMap.get(transaction.getWalletId());
         return walletCurrency == null || walletCurrency.isBlank() ? "VND" : walletCurrency;
+    }
+
+    private void updateAmountCacheSeed(FinanceUiState state, Map<String, String> walletCurrencyMap) {
+        String seed =
+            state.getTransactions().size()
+                + "|"
+                + selectedScope.name()
+                + "|"
+                + selectedStart.toEpochSecond()
+                + "|"
+                + reportFilter.getWalletIds().hashCode()
+                + "|"
+                + reportFilter.getTransactionTypes().hashCode()
+                + "|"
+                + walletCurrencyMap.hashCode()
+                + "|"
+                + (latestRateSnapshot == null ? 0 : latestRateSnapshot.hashCode());
+        if (!seed.equals(amountCacheSeed)) {
+            amountCacheSeed = seed;
+            amountCache.clear();
+        }
     }
 
     private void loadLatestRateSnapshot() {
@@ -430,6 +638,16 @@ public class CategoryAnalysisActivity extends AppCompatActivity {
         private CategoryBucket(String name, TransactionCategory category) {
             this.name = name;
             this.category = category;
+        }
+    }
+
+    private static final class PeriodOption {
+        private final ZonedDateTime start;
+        private final String label;
+
+        private PeriodOption(ZonedDateTime start, String label) {
+            this.start = start;
+            this.label = label;
         }
     }
 }

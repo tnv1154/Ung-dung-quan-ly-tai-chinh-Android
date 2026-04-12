@@ -7,6 +7,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.util.AttributeSet;
+import android.view.MotionEvent;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -31,6 +32,23 @@ public class ReportTrendChartView extends View {
             this.income = Math.max(0.0, income);
             this.expense = Math.max(0.0, expense);
         }
+
+        @NonNull
+        public String getLabel() {
+            return label;
+        }
+
+        public double getIncome() {
+            return income;
+        }
+
+        public double getExpense() {
+            return expense;
+        }
+    }
+
+    public interface OnEntryClickListener {
+        void onEntryClick(int index, @NonNull Entry entry);
     }
 
     private final Paint gridPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -48,6 +66,8 @@ public class ReportTrendChartView extends View {
     private final Path incomeFillPath = new Path();
     private final Path expensePath = new Path();
     private final RectF bubbleRect = new RectF();
+    @Nullable
+    private OnEntryClickListener onEntryClickListener;
 
     public ReportTrendChartView(Context context) {
         super(context);
@@ -110,6 +130,10 @@ public class ReportTrendChartView extends View {
             entries.addAll(values);
         }
         invalidate();
+    }
+
+    public void setOnEntryClickListener(@Nullable OnEntryClickListener listener) {
+        this.onEntryClickListener = listener;
     }
 
     @Override
@@ -235,5 +259,36 @@ public class ReportTrendChartView extends View {
 
     private float dp(float value) {
         return value * getResources().getDisplayMetrics().density;
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (onEntryClickListener == null || entries.isEmpty()) {
+            return super.onTouchEvent(event);
+        }
+        if (event.getAction() != MotionEvent.ACTION_UP) {
+            return true;
+        }
+        float left = getPaddingLeft() + dp(6f);
+        float right = getWidth() - getPaddingRight() - dp(6f);
+        if (entries.size() < 2 || right <= left) {
+            return true;
+        }
+        float x = event.getX();
+        if (x < left || x > right) {
+            return true;
+        }
+        float xStep = (right - left) / (entries.size() - 1);
+        int index = Math.round((x - left) / xStep);
+        index = Math.min(entries.size() - 1, Math.max(0, index));
+        onEntryClickListener.onEntryClick(index, entries.get(index));
+        performClick();
+        return true;
+    }
+
+    @Override
+    public boolean performClick() {
+        super.performClick();
+        return true;
     }
 }

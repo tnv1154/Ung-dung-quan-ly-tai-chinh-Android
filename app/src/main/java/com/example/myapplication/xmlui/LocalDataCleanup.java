@@ -5,6 +5,7 @@ import android.content.Context;
 import com.example.myapplication.xmlui.currency.ExchangeRateSyncScheduler;
 import com.example.myapplication.xmlui.notifications.AppNotificationCenter;
 import com.example.myapplication.xmlui.notifications.BudgetAlertNotifier;
+import com.example.myapplication.xmlui.notifications.MonthlyReportNotifier;
 import com.example.myapplication.xmlui.notifications.ReminderScheduler;
 
 final class LocalDataCleanup {
@@ -20,6 +21,7 @@ final class LocalDataCleanup {
         DataSettingsPrefs.clear(appContext);
         NotificationCaptureService.clearLatestNotification(appContext);
         BudgetAlertNotifier.clearLocalState(appContext);
+        MonthlyReportNotifier.clearLocalState(appContext);
         ReminderScheduler.clearLocalState(appContext);
         ExchangeRateSyncScheduler.clearLocalState(appContext);
         AppNotificationCenter.clearAllNotifications(appContext);

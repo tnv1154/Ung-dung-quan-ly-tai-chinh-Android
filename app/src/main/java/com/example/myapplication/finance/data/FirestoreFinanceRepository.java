@@ -28,7 +28,6 @@ import java.util.Set;
 
 public class FirestoreFinanceRepository {
     private static final double BALANCE_EPSILON = 0.000001d;
-    private static final String ERROR_INSUFFICIENT_BALANCE = "Số dư không đủ để thực hiện giao dịch.";
     private static final String ERROR_WALLET_HAS_TRANSACTIONS = "Không thể xóa vì tài khoản đã có giao dịch liên quan.";
     private static final String USERS_COLLECTION = "users";
     private static final String WALLETS_COLLECTION = "wallets";
@@ -226,9 +225,6 @@ public class FirestoreFinanceRepository {
         String providerName,
         boolean isLocked
     ) throws Exception {
-        if (openingBalance < 0.0) {
-            throw new IllegalArgumentException("Số dư ban đầu không hợp lệ.");
-        }
         DocumentReference walletRef = firestore.collection(USERS_COLLECTION)
             .document(userId)
             .collection(WALLETS_COLLECTION)
@@ -442,14 +438,7 @@ public class FirestoreFinanceRepository {
                 throw new IllegalStateException("wallet not found");
             }
             double sourceBalance = readWalletBalance(sourceWalletSnapshot);
-            if ((type == TransactionType.EXPENSE || type == TransactionType.TRANSFER)
-                && isAmountGreaterThanBalance(amount, sourceBalance)) {
-                throw new IllegalArgumentException(ERROR_INSUFFICIENT_BALANCE);
-            }
             double nextSourceBalance = sourceBalance + sourceDelta;
-            if (nextSourceBalance < -BALANCE_EPSILON) {
-                throw new IllegalArgumentException(ERROR_INSUFFICIENT_BALANCE);
-            }
 
             Map<String, Object> sourceUpdate = new HashMap<>();
             sourceUpdate.put("balance", clampBalance(nextSourceBalance));
@@ -533,13 +522,7 @@ public class FirestoreFinanceRepository {
             }
 
             double sourceBalance = readWalletBalance(sourceWalletSnapshot);
-            if (isAmountGreaterThanBalance(sourceAmount, sourceBalance)) {
-                throw new IllegalArgumentException(ERROR_INSUFFICIENT_BALANCE);
-            }
             double nextSourceBalance = sourceBalance - sourceAmount;
-            if (nextSourceBalance < -BALANCE_EPSILON) {
-                throw new IllegalArgumentException(ERROR_INSUFFICIENT_BALANCE);
-            }
             double targetBalance = readWalletBalance(targetWalletSnapshot);
 
             Map<String, Object> sourceUpdate = new HashMap<>();
@@ -568,6 +551,140 @@ public class FirestoreFinanceRepository {
                 txCreatedAt
             );
             transaction.set(txRef, FirestoreFinanceMappersKt.toFirestoreMap(txModel));
+            return null;
+        }));
+    }
+
+    public void updateTransaction(
+        String userId,
+        String transactionId,
+        String walletId,
+        String toWalletId,
+        TransactionType type,
+        double amount,
+        double destinationAmount,
+        String sourceCurrency,
+        String destinationCurrency,
+        Double exchangeRate,
+        Timestamp exchangeRateFetchedAt,
+        String category,
+        String note,
+        Timestamp transactionCreatedAt
+    ) throws Exception {
+        if (transactionId == null || transactionId.isBlank()) {
+            throw new IllegalArgumentException("transactionId is required");
+        }
+        if (walletId == null || walletId.isBlank()) {
+            throw new IllegalArgumentException("walletId is required");
+        }
+        if (type == null) {
+            throw new IllegalArgumentException("transaction type is required");
+        }
+        if (amount <= 0.0) {
+            throw new IllegalArgumentException("amount must be positive");
+        }
+
+        final String effectiveToWalletId;
+        final double effectiveDestinationAmount;
+        final String effectiveSourceCurrency;
+        final String effectiveDestinationCurrency;
+        if (type == TransactionType.TRANSFER) {
+            if (toWalletId == null || toWalletId.isBlank()) {
+                throw new IllegalArgumentException("toWalletId is required for transfer");
+            }
+            if (walletId.equals(toWalletId)) {
+                throw new IllegalArgumentException("source and destination wallet must be different");
+            }
+            if (destinationAmount <= 0.0) {
+                throw new IllegalArgumentException("destinationAmount must be positive");
+            }
+            effectiveToWalletId = toWalletId;
+            effectiveDestinationAmount = destinationAmount;
+            effectiveSourceCurrency = normalizeCurrency(sourceCurrency);
+            effectiveDestinationCurrency = normalizeCurrency(destinationCurrency);
+        } else {
+            effectiveToWalletId = null;
+            effectiveDestinationAmount = amount;
+            effectiveSourceCurrency = "";
+            effectiveDestinationCurrency = "";
+            exchangeRate = null;
+            exchangeRateFetchedAt = null;
+        }
+
+        final Double finalExchangeRate = exchangeRate;
+        final Timestamp finalExchangeRateFetchedAt = exchangeRateFetchedAt;
+        DocumentReference userRef = firestore.collection(USERS_COLLECTION).document(userId);
+        DocumentReference txRef = userRef.collection(TRANSACTIONS_COLLECTION).document(transactionId);
+        Timestamp now = Timestamp.now();
+        Timestamp txCreatedAt = transactionCreatedAt == null ? now : transactionCreatedAt;
+        Tasks.await(firestore.runTransaction(transaction -> {
+            DocumentSnapshot txSnapshot = transaction.get(txRef);
+            if (!txSnapshot.exists()) {
+                throw new IllegalStateException("transaction not found");
+            }
+            FinanceTransaction previous = FirestoreFinanceMappersKt.toFinanceTransactionModel(txSnapshot);
+            Map<String, Double> walletDeltas = new HashMap<>();
+            applyRevertTransactionDeltas(previous, walletDeltas);
+            applyNewTransactionDeltas(
+                type,
+                walletId,
+                effectiveToWalletId,
+                amount,
+                effectiveDestinationAmount,
+                walletDeltas
+            );
+
+            for (Map.Entry<String, Double> entry : walletDeltas.entrySet()) {
+                double delta = entry.getValue() == null ? 0.0 : entry.getValue();
+                if (Math.abs(delta) <= BALANCE_EPSILON) {
+                    continue;
+                }
+                String changedWalletId = entry.getKey();
+                if (changedWalletId == null || changedWalletId.isBlank()) {
+                    throw new IllegalStateException("wallet id missing while updating transaction");
+                }
+                DocumentReference walletRef = userRef.collection(WALLETS_COLLECTION).document(changedWalletId);
+                DocumentSnapshot walletSnapshot = transaction.get(walletRef);
+                if (!walletSnapshot.exists()) {
+                    throw new IllegalStateException("wallet not found");
+                }
+                double currentBalance = readWalletBalance(walletSnapshot);
+                Map<String, Object> updates = new HashMap<>();
+                updates.put("balance", clampBalance(currentBalance + delta));
+                updates.put("updatedAt", now);
+                transaction.update(walletRef, updates);
+            }
+
+            FinanceTransaction updatedTx;
+            if (type == TransactionType.TRANSFER) {
+                updatedTx = new FinanceTransaction(
+                    txRef.getId(),
+                    walletId,
+                    effectiveToWalletId,
+                    TransactionType.TRANSFER,
+                    amount,
+                    effectiveDestinationAmount,
+                    effectiveSourceCurrency,
+                    effectiveDestinationCurrency,
+                    finalExchangeRate,
+                    finalExchangeRateFetchedAt,
+                    category,
+                    note,
+                    txCreatedAt
+                );
+            } else {
+                updatedTx = new FinanceTransaction(
+                    txRef.getId(),
+                    walletId,
+                    null,
+                    type,
+                    amount,
+                    category,
+                    note,
+                    txCreatedAt
+                );
+            }
+            transaction.set(txRef, FirestoreFinanceMappersKt.toFirestoreMap(updatedTx));
             return null;
         }));
     }
@@ -602,9 +719,6 @@ public class FirestoreFinanceRepository {
                     break;
             }
             double nextSourceBalance = sourceBalance + sourceDelta;
-            if (nextSourceBalance < -BALANCE_EPSILON) {
-                throw new IllegalArgumentException(ERROR_INSUFFICIENT_BALANCE);
-            }
 
             Map<String, Object> sourceUpdate = new HashMap<>();
             sourceUpdate.put("balance", clampBalance(nextSourceBalance));
@@ -624,9 +738,6 @@ public class FirestoreFinanceRepository {
                 double targetBalance = readWalletBalance(targetWalletSnapshot);
                 double targetAmount = tx.getDestinationAmount() > 0.0 ? tx.getDestinationAmount() : tx.getAmount();
                 double nextTargetBalance = targetBalance - targetAmount;
-                if (nextTargetBalance < -BALANCE_EPSILON) {
-                    throw new IllegalArgumentException(ERROR_INSUFFICIENT_BALANCE);
-                }
                 Map<String, Object> targetUpdate = new HashMap<>();
                 targetUpdate.put("balance", clampBalance(nextTargetBalance));
                 targetUpdate.put("updatedAt", now);
@@ -944,11 +1055,72 @@ public class FirestoreFinanceRepository {
         if (rawBalance == null) {
             return 0.0;
         }
-        return Math.max(rawBalance, 0.0);
+        return rawBalance;
     }
 
-    private static boolean isAmountGreaterThanBalance(double amount, double balance) {
-        return amount - balance > BALANCE_EPSILON;
+    private static void applyRevertTransactionDeltas(FinanceTransaction tx, Map<String, Double> walletDeltas) {
+        switch (tx.getType()) {
+            case INCOME:
+                addWalletDelta(walletDeltas, tx.getWalletId(), -tx.getAmount());
+                break;
+            case EXPENSE:
+                addWalletDelta(walletDeltas, tx.getWalletId(), tx.getAmount());
+                break;
+            case TRANSFER:
+                addWalletDelta(walletDeltas, tx.getWalletId(), tx.getAmount());
+                String oldTargetWalletId = tx.getToWalletId();
+                if (oldTargetWalletId == null || oldTargetWalletId.isBlank()) {
+                    throw new IllegalStateException("transfer transaction missing toWalletId");
+                }
+                double oldTargetAmount = tx.getDestinationAmount() > 0.0 ? tx.getDestinationAmount() : tx.getAmount();
+                addWalletDelta(walletDeltas, oldTargetWalletId, -oldTargetAmount);
+                break;
+            default:
+                addWalletDelta(walletDeltas, tx.getWalletId(), tx.getAmount());
+                break;
+        }
+    }
+
+    private static void applyNewTransactionDeltas(
+        TransactionType type,
+        String walletId,
+        String toWalletId,
+        double amount,
+        double destinationAmount,
+        Map<String, Double> walletDeltas
+    ) {
+        switch (type) {
+            case INCOME:
+                addWalletDelta(walletDeltas, walletId, amount);
+                break;
+            case EXPENSE:
+                addWalletDelta(walletDeltas, walletId, -amount);
+                break;
+            case TRANSFER:
+                if (toWalletId == null || toWalletId.isBlank()) {
+                    throw new IllegalArgumentException("toWalletId is required for transfer");
+                }
+                if (walletId.equals(toWalletId)) {
+                    throw new IllegalArgumentException("source and destination wallet must be different");
+                }
+                addWalletDelta(walletDeltas, walletId, -amount);
+                addWalletDelta(walletDeltas, toWalletId, destinationAmount);
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported transaction type: " + type);
+        }
+    }
+
+    private static void addWalletDelta(Map<String, Double> walletDeltas, String walletId, double delta) {
+        if (walletId == null || walletId.isBlank()) {
+            throw new IllegalArgumentException("walletId is required");
+        }
+        double next = walletDeltas.getOrDefault(walletId, 0.0) + delta;
+        if (Math.abs(next) <= BALANCE_EPSILON) {
+            walletDeltas.remove(walletId);
+        } else {
+            walletDeltas.put(walletId, next);
+        }
     }
 
     private static double clampBalance(double value) {

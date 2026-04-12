@@ -1,6 +1,7 @@
 package com.example.myapplication.xmlui;
 
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.TextView;
@@ -13,28 +14,20 @@ import androidx.lifecycle.ViewModelProvider;
 import com.example.myapplication.MainActivity;
 import com.example.myapplication.R;
 import com.example.myapplication.finance.data.FirestoreFinanceRepository;
-import com.example.myapplication.finance.model.BudgetLimit;
-import com.example.myapplication.finance.model.FinanceTransaction;
-import com.example.myapplication.finance.model.TransactionType;
 import com.example.myapplication.finance.ui.FinanceUiState;
 import com.example.myapplication.finance.ui.FinanceViewModel;
 import com.example.myapplication.finance.ui.FinanceViewModelFactory;
 import com.example.myapplication.finance.ui.SessionUiState;
 import com.example.myapplication.finance.ui.SessionViewModel;
+import com.example.myapplication.xmlui.notifications.AppNotificationCenter;
 import com.example.myapplication.xmlui.notifications.BudgetAlertNotifier;
 import com.example.myapplication.xmlui.notifications.ReminderScheduler;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import java.text.SimpleDateFormat;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.Calendar;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 public class NotificationsActivity extends AppCompatActivity {
     public static final String EXTRA_SOURCE_NAV_ITEM_ID = "extra_source_nav_item_id";
@@ -46,12 +39,16 @@ public class NotificationsActivity extends AppCompatActivity {
 
     private View cardExceeded;
     private View cardWarning;
+    private View cardReminder;
     private View cardMonthlyReport;
+    private TextView tvYesterdayLabel;
     private TextView tvLatestEmpty;
     private TextView tvExceededBody;
     private TextView tvWarningBody;
+    private TextView tvReminderBody;
     private TextView tvExceededTime;
     private TextView tvWarningTime;
+    private TextView tvReminderTime;
     private TextView tvReportBody;
     private TextView tvReportTime;
 
@@ -59,6 +56,7 @@ public class NotificationsActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_notification_list);
+        applyHeaderStatusBarStyle();
         sourceNavItemId = resolveSourceNavItemId(getIntent());
         bindViews();
         setupTopBar();
@@ -69,12 +67,16 @@ public class NotificationsActivity extends AppCompatActivity {
     private void bindViews() {
         cardExceeded = findViewById(R.id.cardNotificationExceeded);
         cardWarning = findViewById(R.id.cardNotificationWarning);
+        cardReminder = findViewById(R.id.cardNotificationReminder);
         cardMonthlyReport = findViewById(R.id.cardNotificationMonthlyReport);
+        tvYesterdayLabel = findViewById(R.id.tvNotificationYesterdayLabel);
         tvLatestEmpty = findViewById(R.id.tvNotificationLatestEmpty);
         tvExceededBody = findViewById(R.id.tvNotificationExceededBody);
         tvWarningBody = findViewById(R.id.tvNotificationWarningBody);
+        tvReminderBody = findViewById(R.id.tvNotificationReminderBody);
         tvExceededTime = findViewById(R.id.tvNotificationExceededTime);
         tvWarningTime = findViewById(R.id.tvNotificationWarningTime);
+        tvReminderTime = findViewById(R.id.tvNotificationReminderTime);
         tvReportBody = findViewById(R.id.tvNotificationReportBody);
         tvReportTime = findViewById(R.id.tvNotificationReportTime);
     }
@@ -84,6 +86,23 @@ public class NotificationsActivity extends AppCompatActivity {
         cardMonthlyReport.setOnClickListener(v -> startActivity(new Intent(this, MonthlyReportActivity.class)));
         cardExceeded.setOnClickListener(v -> startActivity(new Intent(this, BudgetActivity.class)));
         cardWarning.setOnClickListener(v -> startActivity(new Intent(this, BudgetActivity.class)));
+        cardReminder.setOnClickListener(v -> {
+            Intent addIntent = new Intent(this, AddTransactionActivity.class);
+            addIntent.putExtra(AddTransactionActivity.EXTRA_PREFILL_MODE, AddTransactionActivity.MODE_EXPENSE);
+            startActivity(addIntent);
+        });
+    }
+
+    private void applyHeaderStatusBarStyle() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            getWindow().setStatusBarColor(getColor(R.color.card_bg));
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            View decorView = getWindow().getDecorView();
+            int flags = decorView.getSystemUiVisibility();
+            flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            decorView.setSystemUiVisibility(flags);
+        }
     }
 
     private void setupBottomNavigation() {
@@ -163,101 +182,63 @@ public class NotificationsActivity extends AppCompatActivity {
     private void renderFinanceState(@NonNull FinanceUiState state) {
         ReminderScheduler.syncFromSettings(this, state.getSettings());
         BudgetAlertNotifier.maybeNotifyExceeded(this, state);
+        BudgetAlertNotifier.maybeNotifyNearLimit(this, state);
 
-        Map<String, Double> expenseByCategory = currentMonthExpenseByCategory(state.getTransactions());
-        BudgetSignal exceeded = null;
-        BudgetSignal warning = null;
-        for (BudgetLimit budget : state.getBudgetLimits()) {
-            if (budget.getLimitAmount() <= 0.0) {
-                continue;
-            }
-            String categoryKey = normalizeCategory(budget.getCategory());
-            if (categoryKey.isEmpty()) {
-                continue;
-            }
-            double used = expenseByCategory.getOrDefault(categoryKey, 0.0);
-            double ratio = used / budget.getLimitAmount();
-            if (ratio >= 1.0) {
-                if (exceeded == null || ratio > exceeded.ratio) {
-                    exceeded = new BudgetSignal(budget.getCategory(), ratio);
-                }
-            } else if (ratio >= 0.8) {
-                if (warning == null || ratio > warning.ratio) {
-                    warning = new BudgetSignal(budget.getCategory(), ratio);
-                }
-            }
-        }
+        AppNotificationCenter.InAppNotificationEntry exceededEntry =
+            AppNotificationCenter.getLatestBudgetExceededEntry(this);
+        AppNotificationCenter.InAppNotificationEntry warningEntry =
+            AppNotificationCenter.getLatestBudgetWarningEntry(this);
+        AppNotificationCenter.InAppNotificationEntry reminderEntry =
+            AppNotificationCenter.getLatestReminderEntry(this);
+        AppNotificationCenter.InAppNotificationEntry monthlyReportEntry =
+            AppNotificationCenter.getLatestMonthlyReportEntry(this);
 
-        if (exceeded != null) {
-            cardExceeded.setVisibility(View.VISIBLE);
-            tvExceededBody.setText(
-                getString(
-                    R.string.notification_item_budget_exceeded_body_with_category,
-                    safeCategoryName(exceeded.category)
-                )
-            );
-            tvExceededTime.setText(currentTimeLabel());
-        } else {
-            cardExceeded.setVisibility(View.GONE);
-        }
+        boolean hasExceeded = bindNotificationCard(cardExceeded, tvExceededBody, tvExceededTime, exceededEntry);
+        boolean hasWarning = bindNotificationCard(cardWarning, tvWarningBody, tvWarningTime, warningEntry);
+        boolean hasReminder = bindNotificationCard(cardReminder, tvReminderBody, tvReminderTime, reminderEntry);
+        boolean hasMonthlyReport = bindNotificationCard(cardMonthlyReport, tvReportBody, tvReportTime, monthlyReportEntry);
 
-        if (warning != null) {
-            cardWarning.setVisibility(View.VISIBLE);
-            int ratioPercent = (int) Math.round(warning.ratio * 100.0);
-            tvWarningBody.setText(getString(R.string.notification_item_budget_warning_body, ratioPercent));
-            tvWarningTime.setText(currentTimeLabel());
-        } else {
-            cardWarning.setVisibility(View.GONE);
-        }
-
-        tvLatestEmpty.setVisibility(
-            cardExceeded.getVisibility() == View.VISIBLE || cardWarning.getVisibility() == View.VISIBLE
-                ? View.GONE
-                : View.VISIBLE
-        );
-
-        int month = Calendar.getInstance().get(Calendar.MONTH) + 1;
-        tvReportBody.setText(getString(R.string.notification_item_monthly_report_body, month));
-        tvReportTime.setText(getString(R.string.label_time_yesterday));
+        tvLatestEmpty.setVisibility(hasExceeded || hasWarning || hasReminder ? View.GONE : View.VISIBLE);
+        tvYesterdayLabel.setVisibility(hasMonthlyReport ? View.VISIBLE : View.GONE);
     }
 
-    private Map<String, Double> currentMonthExpenseByCategory(List<FinanceTransaction> transactions) {
-        Map<String, Double> expenses = new HashMap<>();
-        ZonedDateTime now = ZonedDateTime.now();
-        for (FinanceTransaction tx : transactions) {
-            if (tx.getType() != TransactionType.EXPENSE) {
-                continue;
-            }
-            ZonedDateTime txTime = Instant.ofEpochSecond(tx.getCreatedAt().getSeconds(), tx.getCreatedAt().getNanoseconds())
-                .atZone(ZoneId.systemDefault());
-            if (txTime.getYear() != now.getYear() || txTime.getMonthValue() != now.getMonthValue()) {
-                continue;
-            }
-            String key = normalizeCategory(tx.getCategory());
-            if (key.isEmpty()) {
-                continue;
-            }
-            expenses.put(key, expenses.getOrDefault(key, 0.0) + tx.getAmount());
+    private boolean bindNotificationCard(
+        View card,
+        TextView bodyView,
+        TextView timeView,
+        AppNotificationCenter.InAppNotificationEntry entry
+    ) {
+        if (entry == null) {
+            card.setVisibility(View.GONE);
+            return false;
         }
-        return expenses;
+        card.setVisibility(View.VISIBLE);
+        bodyView.setText(entry.getBody());
+        timeView.setText(formatNotificationTime(entry.getTriggeredAtMillis()));
+        return true;
     }
 
-    private String normalizeCategory(String value) {
-        if (value == null) {
+    private String formatNotificationTime(long timeMillis) {
+        if (timeMillis <= 0L) {
             return "";
         }
-        return value.trim().toLowerCase(Locale.ROOT);
-    }
-
-    private String safeCategoryName(String value) {
-        if (value == null || value.trim().isEmpty()) {
-            return getString(R.string.default_category_other);
+        Calendar now = Calendar.getInstance();
+        Calendar target = Calendar.getInstance();
+        target.setTimeInMillis(timeMillis);
+        if (isSameDay(now, target)) {
+            return new SimpleDateFormat("HH:mm", Locale.ROOT).format(new Date(timeMillis));
         }
-        return value.trim();
+        Calendar yesterday = (Calendar) now.clone();
+        yesterday.add(Calendar.DAY_OF_YEAR, -1);
+        if (isSameDay(yesterday, target)) {
+            return getString(R.string.label_time_yesterday);
+        }
+        return new SimpleDateFormat("dd/MM HH:mm", Locale.ROOT).format(new Date(timeMillis));
     }
 
-    private String currentTimeLabel() {
-        return new SimpleDateFormat("hh:mm a", Locale.US).format(new Date());
+    private boolean isSameDay(Calendar first, Calendar second) {
+        return first.get(Calendar.YEAR) == second.get(Calendar.YEAR)
+            && first.get(Calendar.DAY_OF_YEAR) == second.get(Calendar.DAY_OF_YEAR);
     }
 
     private void goToAuth() {
@@ -265,16 +246,6 @@ public class NotificationsActivity extends AppCompatActivity {
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();
-    }
-
-    private static final class BudgetSignal {
-        private final String category;
-        private final double ratio;
-
-        private BudgetSignal(String category, double ratio) {
-            this.category = category;
-            this.ratio = ratio;
-        }
     }
 }
 

@@ -7,10 +7,11 @@
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/layoutCategoryTopBar"
         android:layout_width="0dp"
-        android:layout_height="64dp"
-        android:layout_marginTop="@dimen/screen_top_safe_margin"
+        android:layout_height="wrap_content"
+        android:minHeight="64dp"
         android:background="@color/card_bg"
         android:paddingStart="12dp"
+        android:paddingTop="@dimen/screen_top_safe_margin"
         android:paddingEnd="12dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -71,43 +72,110 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
+                    android:orientation="vertical"
                     android:padding="12dp">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnCategoryMonthPicker"
-                        style="?attr/materialButtonOutlinedStyle"
-                        android:layout_width="0dp"
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="40dp"
-                        android:layout_weight="1"
-                        android:insetTop="0dp"
-                        android:insetBottom="0dp"
-                        android:minHeight="0dp"
-                        android:textAllCaps="false"
-                        android:textSize="15sp" />
+                        android:background="@drawable/bg_report_preview"
+                        android:gravity="center"
+                        android:orientation="horizontal"
+                        android:padding="3dp">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnCategoryScopeWeek"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="34dp"
+                            android:layout_weight="1"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:minHeight="0dp"
+                            android:text="@string/label_period_week"
+                            android:textAllCaps="false"
+                            android:textSize="14sp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnCategoryScopeMonth"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="34dp"
+                            android:layout_weight="1"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:minHeight="0dp"
+                            android:text="@string/label_period_month"
+                            android:textAllCaps="false"
+                            android:textSize="14sp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnCategoryScopeYear"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="34dp"
+                            android:layout_weight="1"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:minHeight="0dp"
+                            android:text="@string/label_period_year"
+                            android:textAllCaps="false"
+                            android:textSize="14sp" />
+                    </LinearLayout>
 
                     <LinearLayout
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:orientation="vertical">
+                        android:layout_marginTop="10dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
 
-                        <TextView
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnCategoryMonthPicker"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_weight="1"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:minHeight="0dp"
+                            android:textAllCaps="false"
+                            android:textSize="15sp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnCategoryFilter"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="8dp"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:minHeight="0dp"
+                            android:text="@string/action_filter"
+                            android:textAllCaps="false"
+                            android:textSize="14sp" />
+
+                        <LinearLayout
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/report_total_expense_upper"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="13sp" />
+                            android:layout_marginStart="10dp"
+                            android:orientation="vertical">
 
-                        <TextView
-                            android:id="@+id/tvCategoryAnalysisTotal"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/default_money"
-                            android:textColor="@color/text_primary"
-                            android:textSize="32sp"
-                            android:textStyle="bold" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/report_total_expense_upper"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="13sp" />
+
+                            <TextView
+                                android:id="@+id/tvCategoryAnalysisTotal"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/default_money"
+                                android:textColor="@color/text_primary"
+                                android:textSize="32sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>

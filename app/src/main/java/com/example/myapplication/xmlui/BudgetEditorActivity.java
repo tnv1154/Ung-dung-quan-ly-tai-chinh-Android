@@ -1,21 +1,23 @@
 package com.example.myapplication.xmlui;
 
 import android.app.DatePickerDialog;
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.example.myapplication.R;
 import com.example.myapplication.finance.data.FirestoreFinanceRepository;
 import com.example.myapplication.finance.model.BudgetLimit;
-import com.example.myapplication.finance.model.TransactionCategory;
-import com.example.myapplication.finance.model.TransactionType;
 import com.example.myapplication.finance.ui.FinanceUiState;
 import com.example.myapplication.finance.ui.FinanceViewModel;
 import com.example.myapplication.finance.ui.FinanceViewModelFactory;
@@ -23,14 +25,11 @@ import com.example.myapplication.finance.ui.SessionUiState;
 import com.example.myapplication.finance.ui.SessionViewModel;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 
 public class BudgetEditorActivity extends AppCompatActivity {
@@ -47,16 +46,14 @@ public class BudgetEditorActivity extends AppCompatActivity {
     private SessionViewModel sessionViewModel;
     private FinanceViewModel financeViewModel;
     private String observedUserId;
-    private FinanceUiState latestState;
-
     private TextInputEditText etName;
     private TextInputEditText etAmount;
     private TextView tvError;
     private MaterialButton btnCategory;
+    private MaterialButton btnRepeatValue;
     private MaterialButton btnStartDate;
     private MaterialButton btnEndDate;
     private MaterialButton btnDelete;
-    private MaterialButtonToggleGroup repeatGroup;
 
     private String editingBudgetId;
     private String selectedCategory = BudgetLimit.CATEGORY_ALL;
@@ -64,6 +61,19 @@ public class BudgetEditorActivity extends AppCompatActivity {
     private LocalDate selectedStartDate = LocalDate.now().withDayOfMonth(1);
     private LocalDate selectedEndDate = LocalDate.now();
     private boolean submitPending;
+    private final ActivityResultLauncher<Intent> categoryPickerLauncher =
+        registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+            if (result.getResultCode() != RESULT_OK || result.getData() == null) {
+                return;
+            }
+            String category = result.getData().getStringExtra(BudgetCategoryPickerActivity.EXTRA_RESULT_CATEGORY);
+            if (category == null || category.trim().isEmpty()) {
+                return;
+            }
+            selectedCategory = category.trim();
+            refreshUiState();
+            tvError.setVisibility(View.GONE);
+        });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -72,7 +82,6 @@ public class BudgetEditorActivity extends AppCompatActivity {
         bindViews();
         readIntent();
         setupToolbar();
-        setupRepeatSelector();
         setupActions();
         refreshUiState();
         setupSession();
@@ -83,10 +92,10 @@ public class BudgetEditorActivity extends AppCompatActivity {
         etAmount = findViewById(R.id.etBudgetEditorAmount);
         tvError = findViewById(R.id.tvBudgetEditorError);
         btnCategory = findViewById(R.id.btnBudgetEditorCategory);
+        btnRepeatValue = findViewById(R.id.btnBudgetRepeatValue);
         btnStartDate = findViewById(R.id.btnBudgetStartDate);
         btnEndDate = findViewById(R.id.btnBudgetEndDate);
         btnDelete = findViewById(R.id.btnBudgetEditorDelete);
-        repeatGroup = findViewById(R.id.groupBudgetRepeat);
     }
 
     private void readIntent() {
@@ -120,26 +129,13 @@ public class BudgetEditorActivity extends AppCompatActivity {
     private void setupToolbar() {
         MaterialToolbar toolbar = findViewById(R.id.toolbarBudgetEditor);
         toolbar.setTitle(editingBudgetId == null ? R.string.budget_editor_title_add : R.string.budget_editor_title_edit);
+        toolbar.setTitleTextColor(ContextCompat.getColor(this, R.color.text_primary));
         toolbar.setNavigationOnClickListener(v -> finish());
     }
 
-    private void setupRepeatSelector() {
-        int checkedId = BudgetLimit.REPEAT_MONTHLY.equals(selectedRepeatCycle)
-            ? R.id.btnBudgetRepeatMonthly
-            : R.id.btnBudgetRepeatNone;
-        repeatGroup.check(checkedId);
-        repeatGroup.addOnButtonCheckedListener((group, checkedButtonId, isChecked) -> {
-            if (!isChecked) {
-                return;
-            }
-            selectedRepeatCycle = checkedButtonId == R.id.btnBudgetRepeatMonthly
-                ? BudgetLimit.REPEAT_MONTHLY
-                : BudgetLimit.REPEAT_NONE;
-        });
-    }
-
     private void setupActions() {
-        btnCategory.setOnClickListener(v -> chooseCategory());
+        btnCategory.setOnClickListener(v -> openBudgetCategoryPicker());
+        btnRepeatValue.setOnClickListener(v -> chooseRepeatCycle());
         btnStartDate.setOnClickListener(v -> pickDate(true));
         btnEndDate.setOnClickListener(v -> pickDate(false));
         findViewById(R.id.btnBudgetEditorSave).setOnClickListener(v -> saveBudget());
@@ -151,8 +147,13 @@ public class BudgetEditorActivity extends AppCompatActivity {
             ? getString(R.string.budget_category_all)
             : selectedCategory;
         btnCategory.setText(categoryText);
-        btnStartDate.setText(getString(R.string.budget_editor_start_date, DATE_FORMAT.format(selectedStartDate)));
-        btnEndDate.setText(getString(R.string.budget_editor_end_date, DATE_FORMAT.format(selectedEndDate)));
+        btnRepeatValue.setText(
+            BudgetLimit.REPEAT_MONTHLY.equals(selectedRepeatCycle)
+                ? getString(R.string.budget_repeat_monthly)
+                : getString(R.string.budget_repeat_none)
+        );
+        btnStartDate.setText(DATE_FORMAT.format(selectedStartDate));
+        btnEndDate.setText(DATE_FORMAT.format(selectedEndDate));
         btnDelete.setVisibility(editingBudgetId == null ? View.GONE : View.VISIBLE);
     }
 
@@ -177,7 +178,6 @@ public class BudgetEditorActivity extends AppCompatActivity {
     }
 
     private void renderFinanceState(@NonNull FinanceUiState state) {
-        latestState = state;
         if (state.getErrorMessage() != null && !state.getErrorMessage().trim().isEmpty()) {
             if (!submitPending) {
                 Toast.makeText(this, state.getErrorMessage(), Toast.LENGTH_SHORT).show();
@@ -186,35 +186,25 @@ public class BudgetEditorActivity extends AppCompatActivity {
         }
     }
 
-    private void chooseCategory() {
-        List<TransactionCategory> sourceCategories = latestState == null
-            ? CategoryFallbackMerger.mergeWithFallbacks(null)
-            : CategoryFallbackMerger.mergeWithFallbacks(latestState.getCategories());
-        List<TransactionCategory> expenseCategories = new ArrayList<>();
-        for (TransactionCategory category : sourceCategories) {
-            if (category.getType() == TransactionType.EXPENSE) {
-                expenseCategories.add(category);
-            }
-        }
-        if (expenseCategories.isEmpty()) {
-            showError(getString(R.string.label_category_empty));
-            return;
-        }
-        List<String> optionValues = new ArrayList<>();
-        List<String> optionNames = new ArrayList<>();
-        optionValues.add(BudgetLimit.CATEGORY_ALL);
-        optionNames.add(getString(R.string.budget_category_all));
-        for (TransactionCategory category : expenseCategories) {
-            optionValues.add(category.getName());
-            optionNames.add(category.getName());
-        }
-        String[] options = optionNames.toArray(new String[0]);
+    private void openBudgetCategoryPicker() {
+        Intent intent = new Intent(this, BudgetCategoryPickerActivity.class);
+        intent.putExtra(BudgetCategoryPickerActivity.EXTRA_SELECTED_CATEGORY, selectedCategory);
+        categoryPickerLauncher.launch(intent);
+    }
+
+    private void chooseRepeatCycle() {
+        String[] options = new String[] {
+            getString(R.string.budget_repeat_none),
+            getString(R.string.budget_repeat_monthly)
+        };
+        int checkedIndex = BudgetLimit.REPEAT_MONTHLY.equals(selectedRepeatCycle) ? 1 : 0;
         new MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.label_choose_budget_category)
-            .setItems(options, (dialog, which) -> {
-                selectedCategory = optionValues.get(which);
+            .setTitle(R.string.budget_editor_label_repeat)
+            .setSingleChoiceItems(options, checkedIndex, (dialog, which) -> {
+                selectedRepeatCycle = which == 1 ? BudgetLimit.REPEAT_MONTHLY : BudgetLimit.REPEAT_NONE;
                 refreshUiState();
                 tvError.setVisibility(View.GONE);
+                dialog.dismiss();
             })
             .show();
     }

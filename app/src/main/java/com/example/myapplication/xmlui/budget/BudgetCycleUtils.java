@@ -2,6 +2,7 @@ package com.example.myapplication.xmlui.budget;
 
 import com.example.myapplication.finance.model.BudgetLimit;
 import com.example.myapplication.finance.model.FinanceTransaction;
+import com.example.myapplication.finance.model.TransactionCategory;
 import com.example.myapplication.finance.model.TransactionType;
 
 import java.time.Instant;
@@ -73,12 +74,34 @@ public final class BudgetCycleUtils {
 
     public static double calculateSpent(BudgetLimit budget, List<FinanceTransaction> transactions, ZoneId zoneId, LocalDate referenceDate) {
         BudgetWindow window = resolveWindow(budget, referenceDate);
-        return calculateSpentInWindow(budget, transactions, zoneId, window.getStart(), window.getEnd());
+        return calculateSpentInWindow(budget, transactions, null, zoneId, window.getStart(), window.getEnd());
+    }
+
+    public static double calculateSpent(
+        BudgetLimit budget,
+        List<FinanceTransaction> transactions,
+        List<TransactionCategory> categories,
+        ZoneId zoneId,
+        LocalDate referenceDate
+    ) {
+        BudgetWindow window = resolveWindow(budget, referenceDate);
+        return calculateSpentInWindow(budget, transactions, categories, zoneId, window.getStart(), window.getEnd());
     }
 
     public static double calculateSpentInWindow(
         BudgetLimit budget,
         List<FinanceTransaction> transactions,
+        ZoneId zoneId,
+        LocalDate startDate,
+        LocalDate endDate
+    ) {
+        return calculateSpentInWindow(budget, transactions, null, zoneId, startDate, endDate);
+    }
+
+    public static double calculateSpentInWindow(
+        BudgetLimit budget,
+        List<FinanceTransaction> transactions,
+        List<TransactionCategory> categories,
         ZoneId zoneId,
         LocalDate startDate,
         LocalDate endDate
@@ -95,12 +118,42 @@ public final class BudgetCycleUtils {
             if (txDate.isBefore(startDate) || txDate.isAfter(endDate)) {
                 continue;
             }
-            if (!isAllCategory(budget) && !normalizeCategory(tx.getCategory()).equals(normalizeCategory(budget.getCategory()))) {
+            if (!matchesBudgetCategory(budget, tx.getCategory(), categories)) {
                 continue;
             }
             spent += tx.getAmount();
         }
         return spent;
+    }
+
+    private static boolean matchesBudgetCategory(
+        BudgetLimit budget,
+        String transactionCategory,
+        List<TransactionCategory> categories
+    ) {
+        if (isAllCategory(budget)) {
+            return true;
+        }
+        String budgetCategory = normalizeCategory(budget.getCategory());
+        String txCategory = normalizeCategory(transactionCategory);
+        if (txCategory.equals(budgetCategory)) {
+            return true;
+        }
+        if (categories == null || categories.isEmpty()) {
+            return false;
+        }
+        for (TransactionCategory category : categories) {
+            if (category.getType() != TransactionType.EXPENSE) {
+                continue;
+            }
+            if (!normalizeCategory(category.getParentName()).equals(budgetCategory)) {
+                continue;
+            }
+            if (normalizeCategory(category.getName()).equals(txCategory)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static long daysRemaining(BudgetWindow window, LocalDate referenceDate) {

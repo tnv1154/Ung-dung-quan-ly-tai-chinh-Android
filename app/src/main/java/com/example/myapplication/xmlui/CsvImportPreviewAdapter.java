@@ -24,7 +24,20 @@ import java.util.List;
 import java.util.Locale;
 
 public class CsvImportPreviewAdapter extends RecyclerView.Adapter<CsvImportPreviewAdapter.CsvPreviewViewHolder> {
+    public interface RowClickListener {
+        void onRowClick(int position, CsvImportRow row);
+    }
+
     private final List<CsvImportRow> items = new ArrayList<>();
+    private final RowClickListener rowClickListener;
+
+    public CsvImportPreviewAdapter() {
+        this(null);
+    }
+
+    public CsvImportPreviewAdapter(RowClickListener rowClickListener) {
+        this.rowClickListener = rowClickListener;
+    }
 
     public void submit(List<CsvImportRow> rows) {
         items.clear();
@@ -43,7 +56,7 @@ public class CsvImportPreviewAdapter extends RecyclerView.Adapter<CsvImportPrevi
 
     @Override
     public void onBindViewHolder(@NonNull CsvPreviewViewHolder holder, int position) {
-        holder.bind(items.get(position));
+        holder.bind(items.get(position), rowClickListener);
     }
 
     @Override
@@ -69,7 +82,18 @@ public class CsvImportPreviewAdapter extends RecyclerView.Adapter<CsvImportPrevi
             tvMetaRight = itemView.findViewById(R.id.tvCsvPreviewMetaRight);
         }
 
-        void bind(CsvImportRow row) {
+        void bind(CsvImportRow row, RowClickListener rowClickListener) {
+            if (rowClickListener == null) {
+                itemView.setOnClickListener(null);
+            } else {
+                itemView.setOnClickListener(v -> {
+                    int adapterPosition = getAdapterPosition();
+                    if (adapterPosition == RecyclerView.NO_POSITION) {
+                        return;
+                    }
+                    rowClickListener.onRowClick(adapterPosition, row);
+                });
+            }
             Context context = itemView.getContext();
             boolean isValid = row != null && row.isValid();
             TransactionType type = row == null ? null : row.getType();
