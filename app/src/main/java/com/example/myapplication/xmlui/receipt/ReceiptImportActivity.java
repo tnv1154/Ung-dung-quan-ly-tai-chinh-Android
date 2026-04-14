@@ -33,6 +33,7 @@ import com.example.myapplication.finance.data.FirestoreFinanceRepository;
 import com.example.myapplication.finance.model.TransactionCategory;
 import com.example.myapplication.finance.model.TransactionType;
 import com.example.myapplication.xmlui.AddTransactionActivity;
+import com.example.myapplication.xmlui.CategoryFallbackMerger;
 import com.google.android.material.button.MaterialButton;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.firebase.auth.FirebaseAuth;
@@ -500,10 +501,10 @@ public class ReceiptImportActivity extends AppCompatActivity {
 
     private List<String> loadExpenseParentCategories() {
         LinkedHashSet<String> categoryNames = new LinkedHashSet<>();
+        List<TransactionCategory> categories = null;
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
         if (user != null) {
             FirestoreFinanceRepository repository = new FirestoreFinanceRepository();
-            List<TransactionCategory> categories = null;
             try {
                 categories = repository.getCategories(user.getUid(), Source.SERVER);
             } catch (Exception serverError) {
@@ -513,19 +514,17 @@ public class ReceiptImportActivity extends AppCompatActivity {
                     categories = null;
                 }
             }
-            if (categories != null) {
-                for (TransactionCategory category : categories) {
-                    if (category == null || category.getType() != TransactionType.EXPENSE) {
-                        continue;
-                    }
-                    if (!safe(category.getParentName()).trim().isEmpty()) {
-                        continue;
-                    }
-                    String name = safe(category.getName()).trim();
-                    if (!name.isEmpty() && !isDefaultExpenseCategory(name)) {
-                        categoryNames.add(name);
-                    }
-                }
+        }
+        for (TransactionCategory category : CategoryFallbackMerger.mergeWithFallbacks(categories)) {
+            if (category == null || category.getType() != TransactionType.EXPENSE) {
+                continue;
+            }
+            if (!safe(category.getParentName()).trim().isEmpty()) {
+                continue;
+            }
+            String name = safe(category.getName()).trim();
+            if (!name.isEmpty() && !isDefaultExpenseCategory(name)) {
+                categoryNames.add(name);
             }
         }
         return new ArrayList<>(categoryNames);
