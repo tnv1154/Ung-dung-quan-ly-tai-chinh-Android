@@ -6,14 +6,19 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
+import com.google.firebase.auth.ActionCodeSettings;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.auth.UserProfileChangeRequest;
 
+import java.util.List;
 import java.util.function.Consumer;
 
 public class SessionViewModel extends ViewModel {
+    private static final String SIGNUP_EMAIL_LINK_BASE_URL = "https://finance-management-app-3cbd8.firebaseapp.com/finishSignUp";
+    private static final String APP_PACKAGE_NAME = "com.example.myapplication";
+
     private final FirebaseAuth auth;
     private final MutableLiveData<SessionUiState> uiStateLiveData = new MutableLiveData<>();
     private final FirebaseAuth.AuthStateListener authListener = firebaseAuth ->
@@ -40,10 +45,14 @@ public class SessionViewModel extends ViewModel {
     }
 
     public void register(String email, String password) {
-        register(email, password, null);
+        register(email, password, null, null);
     }
 
     public void register(String email, String password, String displayName) {
+        register(email, password, displayName, null);
+    }
+
+    public void register(String email, String password, String displayName, Consumer<String> onComplete) {
         setState(true, currentUser(), null);
         auth.createUserWithEmailAndPassword(email, password)
             .addOnSuccessListener(result -> {
@@ -51,16 +60,36 @@ public class SessionViewModel extends ViewModel {
                 String name = safe(displayName).trim();
                 if (user == null || name.isBlank()) {
                     setState(false, currentUser(), null);
+                    if (onComplete != null) {
+                        onComplete.accept(null);
+                    }
                     return;
                 }
                 UserProfileChangeRequest request = new UserProfileChangeRequest.Builder()
                     .setDisplayName(name)
                     .build();
                 user.updateProfile(request)
-                    .addOnSuccessListener(unused -> setState(false, currentUser(), null))
-                    .addOnFailureListener(error -> setState(false, currentUser(), messageOrDefault(error, "Đăng ký thất bại")));
+                    .addOnSuccessListener(unused -> {
+                        setState(false, currentUser(), null);
+                        if (onComplete != null) {
+                            onComplete.accept(null);
+                        }
+                    })
+                    .addOnFailureListener(error -> {
+                        String message = messageOrDefault(error, "Đăng ký thất bại");
+                        setState(false, currentUser(), message);
+                        if (onComplete != null) {
+                            onComplete.accept(message);
+                        }
+                    });
             })
-            .addOnFailureListener(error -> setState(false, currentUser(), messageOrDefault(error, "Đăng ký thất bại")));
+            .addOnFailureListener(error -> {
+                String message = messageOrDefault(error, "Đăng ký thất bại");
+                setState(false, currentUser(), message);
+                if (onComplete != null) {
+                    onComplete.accept(message);
+                }
+            });
     }
 
     public void signInWithGoogleIdToken(String idToken) {
@@ -192,6 +221,87 @@ public class SessionViewModel extends ViewModel {
             })
             .addOnFailureListener(error -> {
                 String message = messageOrDefault(error, "Không thể gửi email khôi phục mật khẩu");
+                setState(false, currentUser(), message);
+                onComplete.accept(message);
+            });
+    }
+
+    public void ensureEmailRegistered(String email, Consumer<String> onComplete) {
+        String normalized = safe(email).trim();
+        if (normalized.isBlank()) {
+            onComplete.accept("Vui lòng nhập email hợp lệ.");
+            return;
+        }
+        setState(true, currentUser(), null);
+        auth.fetchSignInMethodsForEmail(normalized)
+            .addOnSuccessListener(result -> {
+                setState(false, currentUser(), null);
+                List<String> methods = result.getSignInMethods();
+                if (methods == null || methods.isEmpty()) {
+                    onComplete.accept("Email không tồn tại");
+                    return;
+                }
+                onComplete.accept(null);
+            })
+            .addOnFailureListener(error -> {
+                String message = messageOrDefault(error, "Không thể kiểm tra email.");
+                setState(false, currentUser(), message);
+                onComplete.accept(message);
+            });
+    }
+
+    public void ensureEmailAvailable(String email, Consumer<String> onComplete) {
+        String normalized = safe(email).trim();
+        if (normalized.isBlank()) {
+            onComplete.accept("Vui lòng nhập email hợp lệ.");
+            return;
+        }
+        setState(true, currentUser(), null);
+        auth.fetchSignInMethodsForEmail(normalized)
+            .addOnSuccessListener(result -> {
+                setState(false, currentUser(), null);
+                List<String> methods = result.getSignInMethods();
+                if (methods == null || methods.isEmpty()) {
+                    onComplete.accept(null);
+                    return;
+                }
+                onComplete.accept("Email đã được đăng ký.");
+            })
+            .addOnFailureListener(error -> {
+                String message = messageOrDefault(error, "Không thể kiểm tra email.");
+                setState(false, currentUser(), message);
+                onComplete.accept(message);
+            });
+    }
+
+    public void sendSignupVerificationCode(String email, String verificationCode, Consumer<String> onComplete) {
+        String normalizedEmail = safe(email).trim();
+        String normalizedCode = safe(verificationCode).trim();
+        if (normalizedEmail.isBlank()) {
+            onComplete.accept("Vui lòng nhập email hợp lệ.");
+            return;
+        }
+        if (!normalizedCode.matches("\\d{6}")) {
+            onComplete.accept("Mã xác nhận phải gồm 6 chữ số.");
+            return;
+        }
+        String continueUrl = SIGNUP_EMAIL_LINK_BASE_URL + "?verify_code=" + normalizedCode;
+        ActionCodeSettings settings = ActionCodeSettings.newBuilder()
+            .setUrl(continueUrl)
+            .setHandleCodeInApp(true)
+            .setAndroidPackageName(APP_PACKAGE_NAME, true, null)
+            .build();
+        setState(true, currentUser(), null);
+        auth.sendSignInLinkToEmail(normalizedEmail, settings)
+            .addOnSuccessListener(unused -> {
+                setState(false, currentUser(), null);
+                onComplete.accept(null);
+            })
+            .addOnFailureListener(error -> {
+                String message = messageOrDefault(
+                    error,
+                    "Không thể gửi mã xác nhận email. Vui lòng kiểm tra cấu hình Email Link trong Firebase Authentication."
+                );
                 setState(false, currentUser(), message);
                 onComplete.accept(message);
             });

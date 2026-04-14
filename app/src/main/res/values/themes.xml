@@ -23,6 +23,7 @@
     <style name="TextAppearance.MyApp.BottomNav" parent="TextAppearance.MaterialComponents.Caption">
         <item name="android:textSize">12sp</item>
         <item name="android:fontFamily">sans-serif-medium</item>
-        <item name="android:includeFontPadding">false</item>
+        <item name="android:includeFontPadding">true</item>
     </style>
+
 </resources>

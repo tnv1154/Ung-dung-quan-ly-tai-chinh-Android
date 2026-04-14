@@ -229,13 +229,12 @@
                     android:paddingStart="14dp"
                     android:paddingEnd="10dp">
 
-                    <TextView
+                    <ImageView
                         android:id="@+id/ivWalletCurrencyFlag"
                         android:layout_width="24dp"
                         android:layout_height="24dp"
-                        android:gravity="center"
-                        android:text="@string/symbol_currency_exchange"
-                        android:textSize="18sp" />
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_wallet_currency" />
 
                     <TextView
                         android:id="@+id/tvWalletCurrencyValue"

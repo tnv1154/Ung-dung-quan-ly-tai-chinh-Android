@@ -2,6 +2,8 @@ package com.example.myapplication.finance.model;
 
 import com.google.firebase.Timestamp;
 
+import java.util.Locale;
+
 public class CsvImportRow {
     private final int rowNumber;
     private final TransactionType type;
@@ -32,7 +34,7 @@ public class CsvImportRow {
         this.type = type;
         this.amount = amount;
         this.transactionCreatedAt = transactionCreatedAt;
-        this.currencyCode = currencyCode == null ? "" : currencyCode.trim().toUpperCase();
+        this.currencyCode = currencyCode == null ? "" : currencyCode.trim().toUpperCase(Locale.ROOT);
         this.category = category == null ? "" : category;
         this.note = note == null ? "" : note;
         this.walletName = walletName == null ? "" : walletName;

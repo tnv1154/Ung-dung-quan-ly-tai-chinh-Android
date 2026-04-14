@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/surface_soft">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbarReceiptEditor"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/screen_top_safe_margin"
+        android:background="@color/card_bg"
+        android:minHeight="56dp"
+        app:menu="@menu/menu_receipt_image_editor"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:navigationIcon="@drawable/ic_wallet_back"
+        app:title="@string/receipt_editor_title_short"
+        app:titleCentered="true"
+        app:titleTextColor="@color/text_primary" />
+
+    <FrameLayout
+        android:id="@+id/frameReceiptEditorCanvas"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="20dp"
+        app:layout_constraintBottom_toTopOf="@id/layoutReceiptEditorBottom"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/toolbarReceiptEditor">
+
+        <ImageView
+            android:id="@+id/ivReceiptEditorPreview"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:adjustViewBounds="true"
+            android:contentDescription="@null"
+            android:scaleType="fitCenter" />
+
+        <com.canhub.cropper.CropImageView
+            android:id="@+id/cropImageViewReceipt"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/surface_soft"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <FrameLayout
+        android:id="@+id/layoutReceiptEditorBottom"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="12dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <LinearLayout
+            android:id="@+id/layoutReceiptEditorMainActions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:visibility="visible">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnReceiptEditorModeCrop"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="116dp"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:backgroundTint="@color/card_bg"
+                android:text="@string/receipt_action_crop"
+                android:textAllCaps="false"
+                android:textColor="@color/text_primary"
+                app:cornerRadius="16dp"
+                app:icon="@drawable/ic_receipt_crop"
+                app:iconGravity="textTop"
+                app:iconPadding="12dp"
+                app:iconTint="@color/text_secondary"
+                app:strokeColor="@android:color/transparent"
+                app:strokeWidth="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnReceiptEditorModeRotate"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="116dp"
+                android:layout_weight="1"
+                android:backgroundTint="@color/card_bg"
+                android:text="@string/receipt_action_rotate"
+                android:textAllCaps="false"
+                android:textColor="@color/text_primary"
+                app:cornerRadius="16dp"
+                app:icon="@drawable/ic_receipt_tune"
+                app:iconGravity="textTop"
+                app:iconPadding="12dp"
+                app:iconTint="@color/text_secondary"
+                app:strokeColor="@android:color/transparent"
+                app:strokeWidth="0dp" />
+        </LinearLayout>
+
+        <HorizontalScrollView
+            android:id="@+id/layoutReceiptEditorCropActions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fillViewport="true"
+            android:scrollbars="none"
+            android:visibility="gone">
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/groupReceiptCropRatios"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="4dp"
+                app:singleSelection="true"
+                app:selectionRequired="true">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnReceiptRatioFree"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="52dp"
+                    android:minWidth="88dp"
+                    android:text="@string/receipt_ratio_free"
+                    android:textAllCaps="false" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnReceiptRatioSquare"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="52dp"
+                    android:minWidth="88dp"
+                    android:text="@string/receipt_ratio_square"
+                    android:textAllCaps="false" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnReceiptRatio4x3"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="52dp"
+                    android:minWidth="78dp"
+                    android:text="@string/receipt_ratio_4_3"
+                    android:textAllCaps="false" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnReceiptRatio16x9"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="52dp"
+                    android:minWidth="82dp"
+                    android:text="@string/receipt_ratio_16_9"
+                    android:textAllCaps="false" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnReceiptRatio9x16"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="52dp"
+                    android:minWidth="82dp"
+                    android:text="@string/receipt_ratio_9_16"
+                    android:textAllCaps="false" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+        </HorizontalScrollView>
+
+        <LinearLayout
+            android:id="@+id/layoutReceiptEditorRotateActions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnReceiptRotateLeft"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="112dp"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:backgroundTint="@color/card_bg"
+                android:text="@string/receipt_action_rotate_left_short"
+                android:textAllCaps="false"
+                android:textColor="@color/text_primary"
+                app:cornerRadius="16dp"
+                app:icon="@drawable/ic_receipt_rotate_left"
+                app:iconGravity="textTop"
+                app:iconPadding="12dp"
+                app:iconTint="@color/text_secondary"
+                app:strokeColor="@android:color/transparent"
+                app:strokeWidth="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnReceiptFlipHorizontal"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="112dp"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:backgroundTint="@color/card_bg"
+                android:text="@string/receipt_action_flip"
+                android:textAllCaps="false"
+                android:textColor="@color/text_primary"
+                app:cornerRadius="16dp"
+                app:icon="@drawable/ic_receipt_flip"
+                app:iconGravity="textTop"
+                app:iconPadding="12dp"
+                app:iconTint="@color/text_secondary"
+                app:strokeColor="@android:color/transparent"
+                app:strokeWidth="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnReceiptRotateRight"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="112dp"
+                android:layout_weight="1"
+                android:backgroundTint="@color/card_bg"
+                android:text="@string/receipt_action_rotate_right_short"
+                android:textAllCaps="false"
+                android:textColor="@color/text_primary"
+                app:cornerRadius="16dp"
+                app:icon="@drawable/ic_receipt_rotate_right"
+                app:iconGravity="textTop"
+                app:iconPadding="12dp"
+                app:iconTint="@color/text_secondary"
+                app:strokeColor="@android:color/transparent"
+                app:strokeWidth="0dp" />
+        </LinearLayout>
+    </FrameLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

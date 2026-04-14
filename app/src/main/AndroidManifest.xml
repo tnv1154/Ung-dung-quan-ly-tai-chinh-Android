@@ -4,8 +4,12 @@
     android:installLocation="auto">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
 
     <application
         android:allowBackup="true"
@@ -16,6 +20,15 @@
         android:roundIcon="@mipmap/ic_launcher_round_v2"
         android:supportsRtl="true"
         android:theme="@style/Theme.MyApplication">
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <service
             android:name=".xmlui.NotificationCaptureService"
             android:exported="false"
@@ -42,6 +55,14 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <activity
+            android:name=".xmlui.receipt.ReceiptImportActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
+            android:name=".xmlui.receipt.ReceiptImageEditorActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
         <activity
             android:name=".xmlui.MonthlyReportActivity"
             android:exported="false"
@@ -115,6 +136,14 @@
             android:exported="false"
             android:theme="@style/Theme.MyApplication" />
         <activity
+            android:name=".xmlui.CurrencyPickerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
+            android:name=".xmlui.ProviderPickerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
             android:name=".xmlui.BudgetActivity"
             android:exported="false"
             android:theme="@style/Theme.MyApplication" />
@@ -178,6 +207,10 @@
             android:theme="@style/Theme.MyApplication" />
         <activity
             android:name=".xmlui.AuthActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
+            android:name=".xmlui.SignupEmailVerificationActivity"
             android:exported="false"
             android:theme="@style/Theme.MyApplication" />
         <activity

@@ -647,7 +647,7 @@
                         android:layout_height="22dp"
                         android:layout_gravity="center"
                         android:contentDescription="@null"
-                        android:src="@drawable/ic_add_history"
+                        android:src="@drawable/ic_more_settings"
                         app:tint="#6B7689" />
                 </FrameLayout>
 
@@ -700,7 +700,7 @@
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottomNavigation"
         android:layout_width="0dp"
-        android:layout_height="72dp"
+        android:layout_height="70dp"
         android:background="@drawable/bg_bottom_nav"
         app:itemActiveIndicatorStyle="@null"
         app:itemIconSize="21dp"

@@ -129,13 +129,12 @@
                             app:layout_constraintStart_toStartOf="parent"
                             app:layout_constraintTop_toTopOf="parent">
 
-                            <TextView
+                            <ImageView
                                 android:id="@+id/ivCurrencyConvertFromFlag"
                                 android:layout_width="24dp"
                                 android:layout_height="24dp"
-                                android:gravity="center"
-                                android:text="@string/symbol_currency_exchange"
-                                android:textSize="18sp" />
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_wallet_currency" />
 
                             <LinearLayout
                                 android:layout_width="0dp"
@@ -205,13 +204,12 @@
                             app:layout_constraintStart_toEndOf="@id/btnCurrencyConvertSwap"
                             app:layout_constraintTop_toTopOf="parent">
 
-                            <TextView
+                            <ImageView
                                 android:id="@+id/ivCurrencyConvertToFlag"
                                 android:layout_width="24dp"
                                 android:layout_height="24dp"
-                                android:gravity="center"
-                                android:text="@string/symbol_currency_exchange"
-                                android:textSize="18sp" />
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_wallet_currency" />
 
                             <LinearLayout
                                 android:layout_width="0dp"
@@ -292,7 +290,7 @@
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottomNavigation"
         android:layout_width="0dp"
-        android:layout_height="72dp"
+        android:layout_height="70dp"
         android:background="@drawable/bg_bottom_nav"
         app:itemActiveIndicatorStyle="@null"
         app:itemIconSize="21dp"

@@ -8,7 +8,7 @@
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/layoutNotificationsTopBar"
         android:layout_width="0dp"
-        android:layout_height="64dp"
+        android:layout_height="70dp"
         android:layout_marginTop="@dimen/screen_top_safe_margin"
         android:background="@color/card_bg"
         android:paddingStart="12dp"
@@ -392,7 +392,7 @@
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottomNavigation"
         android:layout_width="0dp"
-        android:layout_height="72dp"
+        android:layout_height="64dp"
         android:background="@drawable/bg_bottom_nav"
         app:itemActiveIndicatorStyle="@null"
         app:itemIconSize="21dp"

@@ -3,30 +3,50 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:gravity="center_vertical"
-    android:minHeight="48dp"
+    android:minHeight="58dp"
     android:orientation="horizontal"
-    android:paddingStart="6dp"
-    android:paddingTop="6dp"
-    android:paddingEnd="6dp"
-    android:paddingBottom="6dp">
+    android:paddingStart="8dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="8dp"
+    android:paddingBottom="8dp">
 
-    <TextView
+    <ImageView
         android:id="@+id/ivCurrencyOptionFlag"
-        android:layout_width="30dp"
+        android:layout_width="40dp"
         android:layout_height="30dp"
-        android:gravity="center"
-        android:text="@string/symbol_currency_exchange"
-        android:textSize="20sp" />
+        android:contentDescription="@null"
+        android:src="@drawable/ic_wallet_currency" />
 
-    <TextView
-        android:id="@+id/tvCurrencyOptionCode"
+    <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="10dp"
         android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvCurrencyOptionName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/tvCurrencyOptionCode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvCurrencyOptionSymbol"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="4dp"
         android:textColor="@color/text_primary"
-        android:textSize="16sp"
-        android:textStyle="bold" />
+        android:textSize="17sp" />
 
     <ImageView
         android:id="@+id/ivCurrencyOptionSelected"

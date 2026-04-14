@@ -5,6 +5,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.example.myapplication.R;
@@ -52,24 +53,36 @@ public class CurrencyPickerAdapter extends BaseAdapter {
         }
 
         String code = currencies.get(position);
+        holder.tvName.setText(CurrencyLogoUtils.displayNameForCode(code));
         holder.tvCode.setText(code);
+        holder.tvSymbol.setText(CurrencyLogoUtils.displaySymbolForCode(code));
+
         boolean isSelected = selectedCode.equalsIgnoreCase(code);
         holder.ivSelected.setVisibility(isSelected ? View.VISIBLE : View.INVISIBLE);
-        holder.tvCode.setTextColor(context.getColor(isSelected ? R.color.blue_primary : R.color.text_primary));
+        holder.tvSymbol.setVisibility(isSelected ? View.GONE : View.VISIBLE);
+        holder.tvName.setTextColor(context.getColor(R.color.text_primary));
+        holder.tvCode.setTextColor(context.getColor(R.color.text_secondary));
+        holder.itemView.setBackgroundColor(context.getColor(isSelected ? R.color.group_bank_bg : android.R.color.transparent));
 
-        holder.ivFlag.setText(CurrencyFlagUtils.flagEmojiForCurrency(code));
+        CurrencyLogoUtils.bindLogo(holder.ivFlag, code, R.drawable.ic_wallet_currency);
 
         return row;
     }
 
     private static class ViewHolder {
-        final TextView ivFlag;
+        final ImageView ivFlag;
         final TextView tvCode;
-        final android.widget.ImageView ivSelected;
+        final TextView tvName;
+        final TextView tvSymbol;
+        final ImageView ivSelected;
+        final View itemView;
 
         ViewHolder(View view) {
+            itemView = view;
             ivFlag = view.findViewById(R.id.ivCurrencyOptionFlag);
             tvCode = view.findViewById(R.id.tvCurrencyOptionCode);
+            tvName = view.findViewById(R.id.tvCurrencyOptionName);
+            tvSymbol = view.findViewById(R.id.tvCurrencyOptionSymbol);
             ivSelected = view.findViewById(R.id.ivCurrencyOptionSelected);
         }
     }

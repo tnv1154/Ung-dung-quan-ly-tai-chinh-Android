@@ -258,21 +258,20 @@
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
+                        android:orientation="vertical">
 
                         <TextView
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
                             android:text="@string/report_income_expense_status"
                             android:textColor="@color/text_primary"
                             android:textSize="24sp"
                             android:textStyle="bold" />
 
                         <LinearLayout
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="36dp"
+                            android:layout_marginTop="8dp"
                             android:background="@drawable/bg_report_preview"
                             android:gravity="center"
                             android:orientation="horizontal"
@@ -281,8 +280,9 @@
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/btnReportOverviewWeek"
                                 style="?attr/materialButtonOutlinedStyle"
-                                android:layout_width="66dp"
+                                android:layout_width="0dp"
                                 android:layout_height="30dp"
+                                android:layout_weight="1"
                                 android:insetTop="0dp"
                                 android:insetBottom="0dp"
                                 android:minHeight="0dp"
@@ -293,8 +293,9 @@
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/btnReportOverviewMonth"
                                 style="?attr/materialButtonOutlinedStyle"
-                                android:layout_width="66dp"
+                                android:layout_width="0dp"
                                 android:layout_height="30dp"
+                                android:layout_weight="1"
                                 android:insetTop="0dp"
                                 android:insetBottom="0dp"
                                 android:minHeight="0dp"
@@ -305,8 +306,9 @@
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/btnReportOverviewYear"
                                 style="?attr/materialButtonOutlinedStyle"
-                                android:layout_width="66dp"
+                                android:layout_width="0dp"
                                 android:layout_height="30dp"
+                                android:layout_weight="1"
                                 android:insetTop="0dp"
                                 android:insetBottom="0dp"
                                 android:minHeight="0dp"
@@ -442,7 +444,7 @@
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottomNavigation"
         android:layout_width="0dp"
-        android:layout_height="72dp"
+        android:layout_height="70dp"
         android:background="@drawable/bg_bottom_nav"
         app:itemActiveIndicatorStyle="@null"
         app:itemIconSize="21dp"
