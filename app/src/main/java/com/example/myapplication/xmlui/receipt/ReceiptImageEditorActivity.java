@@ -48,6 +48,7 @@ public class ReceiptImageEditorActivity extends AppCompatActivity {
     private MaterialButton btnRotateRight;
     private MaterialButtonToggleGroup groupCropRatios;
     private boolean processing;
+    private boolean imageEdited;
     private EditorMode currentMode = EditorMode.EDIT;
     private Uri sourceUri;
     private Bitmap previewBitmap;
@@ -140,12 +141,14 @@ public class ReceiptImageEditorActivity extends AppCompatActivity {
             if (processing) {
                 return;
             }
+            imageEdited = true;
             setMode(EditorMode.CROP);
         });
         btnModeRotate.setOnClickListener(v -> {
             if (processing) {
                 return;
             }
+            imageEdited = true;
             setMode(EditorMode.ROTATE);
         });
         btnRotateLeft.setOnClickListener(v -> {
@@ -209,7 +212,7 @@ public class ReceiptImageEditorActivity extends AppCompatActivity {
         }
 
         ivPreview.setVisibility(editMode ? View.VISIBLE : View.GONE);
-        cropImageView.setVisibility(editMode ? View.GONE : View.VISIBLE);
+        cropImageView.setVisibility(editMode ? View.INVISIBLE : View.VISIBLE);
         layoutMainActions.setVisibility(editMode ? View.VISIBLE : View.GONE);
         layoutCropActions.setVisibility(cropMode ? View.VISIBLE : View.GONE);
         layoutRotateActions.setVisibility(rotateMode ? View.VISIBLE : View.GONE);
@@ -287,6 +290,13 @@ public class ReceiptImageEditorActivity extends AppCompatActivity {
 
     private void continueCrop() {
         if (processing) {
+            return;
+        }
+        if (!imageEdited && sourceUri != null) {
+            Intent data = new Intent();
+            data.putExtra(EXTRA_CROPPED_URI, sourceUri.toString());
+            setResult(RESULT_OK, data);
+            finish();
             return;
         }
         try {

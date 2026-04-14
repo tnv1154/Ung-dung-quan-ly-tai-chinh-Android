@@ -7,6 +7,7 @@ import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
 public final class ReceiptAiApiClient {
+    private static final long OCR_TIMEOUT_SECONDS = 240L;
     private static ReceiptAiApiService service;
 
     private ReceiptAiApiClient() {
@@ -17,10 +18,10 @@ public final class ReceiptAiApiClient {
             return service;
         }
         OkHttpClient client = new OkHttpClient.Builder()
-            .callTimeout(180, TimeUnit.SECONDS)
+            .callTimeout(OCR_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(180, TimeUnit.SECONDS)
-            .writeTimeout(180, TimeUnit.SECONDS)
+            .readTimeout(OCR_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .writeTimeout(OCR_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .build();
         Retrofit retrofit = new Retrofit.Builder()
             .baseUrl("https://example.com/")

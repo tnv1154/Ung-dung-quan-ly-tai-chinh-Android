@@ -394,10 +394,11 @@ public class ReceiptImportActivity extends AppCompatActivity {
         if (!paymentMethod.isEmpty()) {
             data.putExtra(AddTransactionActivity.EXTRA_PREFILL_PAYMENT_METHOD, paymentMethod);
         }
-        data.putExtra(
-            AddTransactionActivity.EXTRA_PREFILL_TIME_MILLIS,
-            parseReceiptDateTimeMillis(payload.receiptDatetime)
-        );
+        long prefillTimeMillis = parseReceiptDateTimeMillis(payload.receiptDatetime);
+        if (prefillTimeMillis <= 0L) {
+            prefillTimeMillis = System.currentTimeMillis();
+        }
+        data.putExtra(AddTransactionActivity.EXTRA_PREFILL_TIME_MILLIS, prefillTimeMillis);
         setResult(RESULT_OK, data);
         finish();
     }

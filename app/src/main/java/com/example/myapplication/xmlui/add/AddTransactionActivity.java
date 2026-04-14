@@ -119,6 +119,7 @@ public class AddTransactionActivity extends AppCompatActivity {
     private String prefillCategoryName;
     private long prefillTimeMillis;
     private String prefillPaymentMethod;
+    private boolean preferPositiveBalanceWallet;
     private long selectedDateTimeMillis;
     private String editingTransactionId;
     private boolean previewEditOnly;
@@ -458,25 +459,35 @@ public class AddTransactionActivity extends AppCompatActivity {
 
         String paymentMethod = data.getStringExtra(EXTRA_PREFILL_PAYMENT_METHOD);
         prefillPaymentMethod = paymentMethod == null || paymentMethod.trim().isEmpty() ? null : paymentMethod.trim();
+        preferPositiveBalanceWallet = prefillPaymentMethod == null;
         applyPendingReceiptWalletSelection();
 
         updateSelectionButtons();
 
-        long timeMillis = data.getLongExtra(EXTRA_PREFILL_TIME_MILLIS, 0L);
-        if (timeMillis > 0L) {
-            selectedDateTimeMillis = timeMillis;
-            updateDateLabel();
+        long timeMillis = data.getLongExtra(EXTRA_PREFILL_TIME_MILLIS, System.currentTimeMillis());
+        if (timeMillis <= 0L) {
+            timeMillis = System.currentTimeMillis();
         }
+        selectedDateTimeMillis = timeMillis;
+        updateDateLabel();
         tvError.setVisibility(View.GONE);
     }
 
     private void applyPendingReceiptWalletSelection() {
-        if (prefillPaymentMethod == null || prefillPaymentMethod.trim().isEmpty() || wallets.isEmpty()) {
+        if (wallets.isEmpty()) {
+            return;
+        }
+        if (prefillPaymentMethod == null || prefillPaymentMethod.trim().isEmpty()) {
+            if (preferPositiveBalanceWallet) {
+                preferPositiveBalanceWallet = false;
+                applyPositiveBalanceWalletFallback();
+            }
             return;
         }
         String targetType = resolveWalletTypeFromPaymentMethod(prefillPaymentMethod);
         prefillPaymentMethod = null;
         if (targetType.isEmpty()) {
+            applyPositiveBalanceWalletFallback();
             return;
         }
         if (selectedSourceWallet != null
@@ -497,6 +508,34 @@ public class AddTransactionActivity extends AppCompatActivity {
                 selectedDestinationWallet = null;
             }
             break;
+        }
+        if (selectedSourceWallet == null
+            || !targetType.equals(WalletUiMapper.normalizeAccountType(selectedSourceWallet.getAccountType()))) {
+            applyPositiveBalanceWalletFallback();
+        }
+    }
+
+    private void applyPositiveBalanceWalletFallback() {
+        if (wallets.isEmpty()) {
+            return;
+        }
+        if (selectedSourceWallet != null && selectedSourceWallet.getBalance() > 0.0d) {
+            return;
+        }
+        Wallet positiveBalanceWallet = null;
+        for (Wallet wallet : wallets) {
+            if (wallet != null && wallet.getBalance() > 0.0d) {
+                positiveBalanceWallet = wallet;
+                break;
+            }
+        }
+        if (positiveBalanceWallet == null) {
+            return;
+        }
+        selectedSourceWallet = positiveBalanceWallet;
+        prefillSourceWalletId = positiveBalanceWallet.getId();
+        if (selectedDestinationWallet != null && selectedDestinationWallet.getId().equals(positiveBalanceWallet.getId())) {
+            selectedDestinationWallet = null;
         }
     }
 
