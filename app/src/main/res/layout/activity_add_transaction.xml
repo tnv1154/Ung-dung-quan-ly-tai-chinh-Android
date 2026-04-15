@@ -586,6 +586,19 @@
     </androidx.core.widget.NestedScrollView>
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabVoiceEntry"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="18dp"
+        android:layout_marginBottom="12dp"
+        android:contentDescription="@string/content_voice_entry"
+        app:backgroundTint="@color/add_mode_blue"
+        app:layout_constraintBottom_toTopOf="@id/fabReceiptScan"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:srcCompat="@drawable/ic_voice_mic"
+        app:tint="@android:color/white" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabReceiptScan"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

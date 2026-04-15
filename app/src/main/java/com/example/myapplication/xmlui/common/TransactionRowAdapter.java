@@ -138,10 +138,18 @@ public class TransactionRowAdapter extends RecyclerView.Adapter<TransactionRowAd
         if (categoryIconKey == null || categoryIconKey.trim().isEmpty()) {
             categoryIconKey = CategoryUiHelper.inferIconKeyFromCategoryName(tx.getCategory(), txType);
         }
-        holder.ivCategoryIcon.setImageResource(CategoryUiHelper.iconResForKey(categoryIconKey, txType));
-        holder.ivCategoryIcon.setImageTintList(ColorStateList.valueOf(
-            holder.ivCategoryIcon.getContext().getColor(CategoryUiHelper.iconTintForKey(categoryIconKey, txType))
-        ));
+        int fallbackIcon = CategoryUiHelper.iconResForKey(categoryIconKey, txType);
+        boolean loadedFromAssets = CategoryAssetIconLoader.applyCategoryIcon(
+            holder.ivCategoryIcon,
+            txType,
+            categoryText,
+            fallbackIcon
+        );
+        holder.ivCategoryIcon.setImageTintList(loadedFromAssets
+            ? null
+            : ColorStateList.valueOf(
+                holder.ivCategoryIcon.getContext().getColor(CategoryUiHelper.iconTintForKey(categoryIconKey, txType))
+            ));
         holder.layoutCategoryIcon.setBackgroundTintList(ColorStateList.valueOf(
             holder.layoutCategoryIcon.getContext().getColor(CategoryUiHelper.iconBgForKey(categoryIconKey, txType))
         ));

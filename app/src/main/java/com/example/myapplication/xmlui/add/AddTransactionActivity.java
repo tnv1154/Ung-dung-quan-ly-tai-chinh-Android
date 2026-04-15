@@ -1,3 +1,4 @@
+//noinspection PackageDirectoryMismatch,SpellCheckingInspection
 package com.example.myapplication.xmlui;
 
 import android.app.DatePickerDialog;
@@ -33,7 +34,22 @@ import com.example.myapplication.finance.ui.FinanceViewModel;
 import com.example.myapplication.finance.ui.FinanceViewModelFactory;
 import com.example.myapplication.finance.ui.SessionUiState;
 import com.example.myapplication.finance.ui.SessionViewModel;
+import com.example.myapplication.xmlui.AuthActivity;
+import com.example.myapplication.xmlui.CategoryActivity;
+import com.example.myapplication.xmlui.CategoryAssetIconLoader;
+import com.example.myapplication.xmlui.CategoryFallbackMerger;
+import com.example.myapplication.xmlui.CategoryPickerActivity;
+import com.example.myapplication.xmlui.CategoryUiHelper;
+import com.example.myapplication.xmlui.HistoryActivity;
+import com.example.myapplication.xmlui.MoneyInputFormatter;
+import com.example.myapplication.xmlui.MoreActivity;
+import com.example.myapplication.xmlui.OverviewActivity;
+import com.example.myapplication.xmlui.ReportActivity;
+import com.example.myapplication.xmlui.SearchTextUtils;
+import com.example.myapplication.xmlui.UiFormatters;
+import com.example.myapplication.xmlui.WalletUiMapper;
 import com.example.myapplication.xmlui.receipt.ReceiptImportActivity;
+import com.example.myapplication.xmlui.voice.VoiceImportActivity;
 import com.example.myapplication.xmlui.currency.CurrencyRateUtils;
 import com.example.myapplication.xmlui.currency.ExchangeRateSnapshotLoader;
 import com.google.firebase.Timestamp;
@@ -85,6 +101,7 @@ public class AddTransactionActivity extends AppCompatActivity {
                 return;
             }
             Intent data = result.getData();
+            syncModeWithSelectedCategoryType(data.getStringExtra(CategoryPickerActivity.EXTRA_SELECTED_CATEGORY_TYPE));
             selectedCategoryId = data.getStringExtra(CategoryPickerActivity.EXTRA_SELECTED_CATEGORY_ID);
             selectedCategoryName = data.getStringExtra(CategoryPickerActivity.EXTRA_SELECTED_CATEGORY_NAME);
             updateSelectionButtons();
@@ -95,6 +112,13 @@ public class AddTransactionActivity extends AppCompatActivity {
                 return;
             }
             applyReceiptPrefill(result.getData());
+        });
+    private final ActivityResultLauncher<Intent> voiceImportLauncher =
+        registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+            if (result.getResultCode() != RESULT_OK || result.getData() == null) {
+                return;
+            }
+            handleVoiceImportResult(result.getData());
         });
 
     private SessionViewModel sessionViewModel;
@@ -153,6 +177,7 @@ public class AddTransactionActivity extends AppCompatActivity {
     private View rowModeExpense;
     private View rowModeIncome;
     private View rowModeTransfer;
+    private FloatingActionButton fabVoiceEntry;
     private FloatingActionButton fabReceiptScan;
 
     @Override
@@ -201,6 +226,7 @@ public class AddTransactionActivity extends AppCompatActivity {
         rowModeExpense = findViewById(R.id.rowModeExpense);
         rowModeIncome = findViewById(R.id.rowModeIncome);
         rowModeTransfer = findViewById(R.id.rowModeTransfer);
+        fabVoiceEntry = findViewById(R.id.fabVoiceEntry);
         fabReceiptScan = findViewById(R.id.fabReceiptScan);
     }
 
@@ -237,6 +263,9 @@ public class AddTransactionActivity extends AppCompatActivity {
         rowTransferDestination.setOnClickListener(v -> chooseDestinationWallet());
         btnSwapTransferWallets.setOnClickListener(v -> swapTransferWallets());
         rowDateTime.setOnClickListener(v -> openDateTimePicker());
+        fabVoiceEntry.setOnClickListener(
+            v -> voiceImportLauncher.launch(new Intent(this, VoiceImportActivity.class))
+        );
         fabReceiptScan.setOnClickListener(
             v -> receiptImportLauncher.launch(new Intent(this, ReceiptImportActivity.class))
         );
@@ -305,6 +334,7 @@ public class AddTransactionActivity extends AppCompatActivity {
         FinanceViewModelFactory factory = new FinanceViewModelFactory(new FirestoreFinanceRepository(), userId);
         financeViewModel = new ViewModelProvider(this, factory).get(FinanceViewModel.class);
         financeViewModel.getUiStateLiveData().observe(this, this::renderFinanceState);
+        financeViewModel.ensureDefaultCategories();
     }
 
     private void renderFinanceState(@NonNull FinanceUiState state) {
@@ -359,7 +389,7 @@ public class AddTransactionActivity extends AppCompatActivity {
         updateSelectionButtons();
 
         String errorMessage = state.getErrorMessage();
-        if (errorMessage != null && isPermissionDenied(errorMessage)) {
+        if (isPermissionDenied(errorMessage)) {
             financeViewModel.clearError();
         }
     }
@@ -473,6 +503,18 @@ public class AddTransactionActivity extends AppCompatActivity {
         tvError.setVisibility(View.GONE);
     }
 
+    private void handleVoiceImportResult(@NonNull Intent data) {
+        if (data.getBooleanExtra(VoiceImportActivity.EXTRA_DIRECT_SAVED, false)) {
+            Toast.makeText(this, R.string.message_transaction_saved, Toast.LENGTH_SHORT).show();
+            resetFormToDefaultState();
+            if (financeViewModel != null) {
+                financeViewModel.refreshRealtimeSync();
+            }
+            return;
+        }
+        applyReceiptPrefill(data);
+    }
+
     private void applyPendingReceiptWalletSelection() {
         if (wallets.isEmpty()) {
             return;
@@ -556,12 +598,14 @@ public class AddTransactionActivity extends AppCompatActivity {
     private void applyEditModeUi() {
         if (!isEditMode() && !previewEditOnly) {
             btnDelete.setVisibility(View.GONE);
+            fabVoiceEntry.setVisibility(View.VISIBLE);
             fabReceiptScan.setVisibility(View.VISIBLE);
             return;
         }
         btnBack.setImageResource(R.drawable.ic_wallet_back);
         btnBack.setContentDescription(getString(R.string.action_back));
         btnDelete.setVisibility(isEditMode() ? View.VISIBLE : View.GONE);
+        fabVoiceEntry.setVisibility(View.GONE);
         fabReceiptScan.setVisibility(View.GONE);
         btnSave.setText(R.string.action_save_changes);
         if (previewEditOnly && rowModeTransfer != null) {
@@ -761,8 +805,14 @@ public class AddTransactionActivity extends AppCompatActivity {
         if (category != null) {
             tvLabel.setText(category.getName());
             layoutIcon.getBackground().setTint(ContextCompat.getColor(this, CategoryUiHelper.iconBgForCategory(category)));
-            ivIcon.setImageResource(CategoryUiHelper.iconResForCategory(category));
-            ivIcon.setImageTintList(ContextCompat.getColorStateList(this, CategoryUiHelper.iconTintForCategory(category)));
+            boolean loadedFromAssets = CategoryAssetIconLoader.applyCategoryIcon(
+                ivIcon,
+                category,
+                CategoryUiHelper.iconResForCategory(category)
+            );
+            ivIcon.setImageTintList(loadedFromAssets
+                ? null
+                : ContextCompat.getColorStateList(this, CategoryUiHelper.iconTintForCategory(category)));
         }
         return item;
     }
@@ -782,6 +832,19 @@ public class AddTransactionActivity extends AppCompatActivity {
         );
         intent.putExtra(CategoryPickerActivity.EXTRA_SELECTED_CATEGORY_ID, selectedCategoryId);
         categoryPickerLauncher.launch(intent);
+    }
+
+    private void syncModeWithSelectedCategoryType(String categoryTypeRaw) {
+        if (categoryTypeRaw == null || categoryTypeRaw.trim().isEmpty()) {
+            return;
+        }
+        if ("INCOME".equalsIgnoreCase(categoryTypeRaw)) {
+            applyModeSelection(Mode.INCOME);
+            return;
+        }
+        if ("EXPENSE".equalsIgnoreCase(categoryTypeRaw)) {
+            applyModeSelection(Mode.EXPENSE);
+        }
     }
 
     private void openCategoryEditor() {
@@ -841,10 +904,14 @@ public class AddTransactionActivity extends AppCompatActivity {
                 ContextCompat.getColor(this, CategoryUiHelper.iconBgForCategory(selectedCategory))
             );
         }
-        ivCategorySelectedIcon.setImageResource(CategoryUiHelper.iconResForCategory(selectedCategory));
-        ivCategorySelectedIcon.setImageTintList(
-            ContextCompat.getColorStateList(this, CategoryUiHelper.iconTintForCategory(selectedCategory))
+        boolean loadedFromAssets = CategoryAssetIconLoader.applyCategoryIcon(
+            ivCategorySelectedIcon,
+            selectedCategory,
+            CategoryUiHelper.iconResForCategory(selectedCategory)
         );
+        ivCategorySelectedIcon.setImageTintList(loadedFromAssets
+            ? null
+            : ContextCompat.getColorStateList(this, CategoryUiHelper.iconTintForCategory(selectedCategory)));
     }
 
     private void applyDefaultCategoryIcon() {

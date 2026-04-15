@@ -341,7 +341,7 @@ public class BudgetEditorActivity extends AppCompatActivity {
                 editingBudgetId == null ? R.string.message_budget_added : R.string.message_budget_updated,
                 Toast.LENGTH_SHORT
             ).show();
-            finish();
+            finishWithSuccessResult();
         });
     }
 
@@ -359,7 +359,12 @@ public class BudgetEditorActivity extends AppCompatActivity {
                 return;
             }
             Toast.makeText(this, R.string.message_budget_deleted, Toast.LENGTH_SHORT).show();
-            finish();
+            finishWithSuccessResult();
         });
+    }
+
+    private void finishWithSuccessResult() {
+        setResult(RESULT_OK);
+        finish();
     }
 }

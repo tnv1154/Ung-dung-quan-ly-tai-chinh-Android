@@ -5,6 +5,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-feature
@@ -61,6 +62,10 @@
             android:theme="@style/Theme.MyApplication" />
         <activity
             android:name=".xmlui.receipt.ReceiptImageEditorActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
+            android:name=".xmlui.voice.VoiceImportActivity"
             android:exported="false"
             android:theme="@style/Theme.MyApplication" />
         <activity
@@ -207,10 +212,6 @@
             android:theme="@style/Theme.MyApplication" />
         <activity
             android:name=".xmlui.AuthActivity"
-            android:exported="false"
-            android:theme="@style/Theme.MyApplication" />
-        <activity
-            android:name=".xmlui.SignupEmailVerificationActivity"
             android:exported="false"
             android:theme="@style/Theme.MyApplication" />
         <activity

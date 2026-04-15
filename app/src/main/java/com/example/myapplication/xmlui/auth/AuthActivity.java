@@ -33,8 +33,6 @@ import com.google.android.material.textfield.TextInputLayout;
 
 public class AuthActivity extends AppCompatActivity {
 
-    private static final long SIGNUP_CODE_EXPIRE_MILLIS = 3 * 60 * 1000L;
-
     private SessionViewModel sessionViewModel;
     private TextInputEditText etAccount;
     private TextInputEditText etPassword;
@@ -204,7 +202,7 @@ public class AuthActivity extends AppCompatActivity {
                 tvAuthError.setVisibility(View.VISIBLE);
                 return;
             }
-            startSignUpVerification(email, password, displayName);
+            sessionViewModel.register(email, password, displayName);
         } else {
             if (password.length() < 6) {
                 tvAuthError.setText(R.string.auth_error_password_required);
@@ -213,37 +211,6 @@ public class AuthActivity extends AppCompatActivity {
             }
             sessionViewModel.signIn(email, password);
         }
-    }
-
-    private void startSignUpVerification(String email, String password, String displayName) {
-        tvAuthError.setVisibility(View.GONE);
-        sessionViewModel.ensureEmailAvailable(email, availabilityError -> runOnUiThread(() -> {
-            if (availabilityError != null && !availabilityError.trim().isEmpty()) {
-                tvAuthError.setText(availabilityError);
-                tvAuthError.setVisibility(View.VISIBLE);
-                return;
-            }
-            long sentAtMillis = System.currentTimeMillis();
-            String verificationCode = SignupVerificationCodeUtils.generateCode();
-            sessionViewModel.sendSignupVerificationCode(email, verificationCode, sendError -> runOnUiThread(() -> {
-                if (sendError != null && !sendError.trim().isEmpty()) {
-                    tvAuthError.setText(sendError);
-                    tvAuthError.setVisibility(View.VISIBLE);
-                    return;
-                }
-                Intent intent = new Intent(this, SignupEmailVerificationActivity.class);
-                intent.putExtra(SignupEmailVerificationActivity.EXTRA_EMAIL, email);
-                intent.putExtra(SignupEmailVerificationActivity.EXTRA_PASSWORD, password);
-                intent.putExtra(SignupEmailVerificationActivity.EXTRA_DISPLAY_NAME, displayName);
-                intent.putExtra(SignupEmailVerificationActivity.EXTRA_CODE, verificationCode);
-                intent.putExtra(
-                    SignupEmailVerificationActivity.EXTRA_EXPIRES_AT_MILLIS,
-                    sentAtMillis + SIGNUP_CODE_EXPIRE_MILLIS
-                );
-                intent.putExtra(SignupEmailVerificationActivity.EXTRA_LAST_SENT_AT_MILLIS, sentAtMillis);
-                startActivity(intent);
-            }));
-        }));
     }
 
     private void updatePasswordRuleIndicators() {

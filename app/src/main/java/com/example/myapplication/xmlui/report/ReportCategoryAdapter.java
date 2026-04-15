@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.myapplication.R;
+import com.example.myapplication.finance.model.TransactionType;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -74,8 +75,13 @@ public class ReportCategoryAdapter extends RecyclerView.Adapter<ReportCategoryAd
     public void onBindViewHolder(@NonNull ReportCategoryViewHolder holder, int position) {
         UiReportCategory item = items.get(position);
         holder.iconBox.setBackgroundTintList(ColorStateList.valueOf(item.getIconBgColor()));
-        holder.icon.setImageResource(item.getIconRes());
-        holder.icon.setImageTintList(ColorStateList.valueOf(item.getIconTintColor()));
+        boolean loadedFromAssets = CategoryAssetIconLoader.applyCategoryIcon(
+            holder.icon,
+            TransactionType.EXPENSE,
+            item.getName(),
+            item.getIconRes()
+        );
+        holder.icon.setImageTintList(loadedFromAssets ? null : ColorStateList.valueOf(item.getIconTintColor()));
         holder.tvName.setText(item.getName());
         holder.tvAmount.setText(UiFormatters.money(item.getAmount()));
         holder.tvPercent.setText(UiFormatters.percent(item.getRatio()));

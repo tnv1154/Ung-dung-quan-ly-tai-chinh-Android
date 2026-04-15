@@ -47,6 +47,7 @@ public class CategoryPickerActivity extends AppCompatActivity {
     public static final String EXTRA_TYPE = "extra_type";
     public static final String EXTRA_SELECTED_CATEGORY_ID = "extra_selected_category_id";
     public static final String EXTRA_SELECTED_CATEGORY_NAME = "extra_selected_category_name";
+    public static final String EXTRA_SELECTED_CATEGORY_TYPE = "extra_selected_category_type";
 
     private SessionViewModel sessionViewModel;
     private FinanceViewModel financeViewModel;
@@ -320,8 +321,14 @@ public class CategoryPickerActivity extends AppCompatActivity {
         ImageButton btnAction = view.findViewById(R.id.btnCategoryEntryAction);
 
         layoutIcon.getBackground().setTint(ContextCompat.getColor(this, CategoryUiHelper.iconBgForCategory(category)));
-        ivIcon.setImageResource(CategoryUiHelper.iconResForCategory(category));
-        ivIcon.setImageTintList(ContextCompat.getColorStateList(this, CategoryUiHelper.iconTintForCategory(category)));
+        boolean loadedFromAssets = CategoryAssetIconLoader.applyCategoryIcon(
+            ivIcon,
+            category,
+            CategoryUiHelper.iconResForCategory(category)
+        );
+        ivIcon.setImageTintList(loadedFromAssets
+            ? null
+            : ContextCompat.getColorStateList(this, CategoryUiHelper.iconTintForCategory(category)));
         tvTitle.setText(category.getName());
         tvSubtitle.setVisibility(View.VISIBLE);
         tvSubtitle.setText(subtitle);
@@ -347,6 +354,7 @@ public class CategoryPickerActivity extends AppCompatActivity {
         Intent intent = new Intent();
         intent.putExtra(EXTRA_SELECTED_CATEGORY_ID, category.getId());
         intent.putExtra(EXTRA_SELECTED_CATEGORY_NAME, category.getName());
+        intent.putExtra(EXTRA_SELECTED_CATEGORY_TYPE, category.getType().name());
         setResult(RESULT_OK, intent);
         finish();
     }

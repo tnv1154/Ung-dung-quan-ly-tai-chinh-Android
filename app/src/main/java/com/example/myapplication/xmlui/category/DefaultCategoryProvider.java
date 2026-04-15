@@ -58,7 +58,6 @@ public final class DefaultCategoryProvider {
         items.add(expenseChild("fallback_expense_growth_course", "Khóa học", "Phát triển bản thân", "course", 1001, now));
 
         items.add(expenseParent("fallback_expense_money_out", "Tiền ra", "money_out", 1100, now));
-        items.add(expenseChild("fallback_expense_money_out_other", "Khác", "Tiền ra", "other_out", 1101, now));
         return items;
     }
 

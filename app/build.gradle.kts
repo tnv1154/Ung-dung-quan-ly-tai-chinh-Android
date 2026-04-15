@@ -13,6 +13,12 @@ val receiptLocalConfig = Properties().apply {
 }
 val receiptAiApiUrl = (receiptLocalConfig.getProperty("API_URL") ?: "").trim()
 val escapedReceiptAiApiUrl = receiptAiApiUrl.replace("\\", "\\\\").replace("\"", "\\\"")
+val voiceAiApiUrl = (
+    receiptLocalConfig.getProperty("ASR_API_URL")
+        ?: receiptLocalConfig.getProperty("VOICE_API_URL")
+        ?: ""
+    ).trim()
+val escapedVoiceAiApiUrl = voiceAiApiUrl.replace("\\", "\\\\").replace("\"", "\\\"")
 
 val releaseSigningConfig = Properties().apply {
     val file = rootProject.file("keystore.properties")
@@ -51,6 +57,7 @@ android {
         versionCode = 1
         versionName = "1.0"
         buildConfigField("String", "RECEIPT_AI_API_URL", "\"$escapedReceiptAiApiUrl\"")
+        buildConfigField("String", "VOICE_AI_API_URL", "\"$escapedVoiceAiApiUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

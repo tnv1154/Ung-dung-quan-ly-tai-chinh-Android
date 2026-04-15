@@ -7,6 +7,8 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
@@ -47,6 +49,13 @@ public class BudgetActivity extends AppCompatActivity {
     private TextView tvSummaryHint;
     private ProgressBar pbSummary;
     private FinanceUiState latestState;
+    private final ActivityResultLauncher<Intent> budgetEditorLauncher =
+        registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+            if (result.getResultCode() != RESULT_OK || financeViewModel == null) {
+                return;
+            }
+            financeViewModel.refreshRealtimeSync();
+        });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -229,7 +238,7 @@ public class BudgetActivity extends AppCompatActivity {
                 intent.putExtra(BudgetEditorActivity.EXTRA_BUDGET_END_EPOCH_DAY, budget.getEndDateEpochDay());
             }
         }
-        startActivity(intent);
+        budgetEditorLauncher.launch(intent);
     }
 
     private BudgetLimit findBudgetById(String budgetId) {

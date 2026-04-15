@@ -17,4 +17,12 @@ public interface ReceiptAiApiService {
         @Part MultipartBody.Part image,
         @Part("prompt") RequestBody prompt
     );
+
+    @Multipart
+    @POST
+    Call<ResponseBody> parseVoiceNote(
+        @Url String url,
+        @Part MultipartBody.Part audio,
+        @Part("prompt") RequestBody prompt
+    );
 }

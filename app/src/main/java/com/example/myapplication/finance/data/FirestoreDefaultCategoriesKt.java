@@ -36,7 +36,6 @@ final class FirestoreDefaultCategoriesKt {
         items.add(income("Thưởng", "bonus", 30, now));
         items.add(income("Tiền vào", "money_in", 40, now));
         items.add(income("Thu nợ", "debt_in", 50, now));
-        items.add(income("Lãi tiết kiệm", "interest", 60, now));
         items.add(income("Khác", "other_in", 70, now));
 
         items.add(expenseParent("Ăn uống", "food", 100, now));
@@ -98,8 +97,6 @@ final class FirestoreDefaultCategoriesKt {
         items.add(expenseParent("Tiền ra", "money_out", 1100, now));
         items.add(expenseChild("Trả nợ", "Tiền ra", "debt_out", 1101, now));
         items.add(expenseChild("Cho vay", "Tiền ra", "loan", 1102, now));
-        items.add(expenseChild("Đầu tư", "Tiền ra", "invest", 1103, now));
-        items.add(expenseChild("Khác", "Tiền ra", "other_out", 1104, now));
         return items;
     }
 

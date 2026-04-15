@@ -896,13 +896,72 @@ public class FirestoreFinanceRepository {
         Tasks.await(ref.set(FirestoreFinanceMappersKt.toFirestoreMap(category)));
     }
 
+    public void updateCategory(
+        String userId,
+        String categoryId,
+        String name,
+        TransactionType type,
+        String parentName,
+        String iconKey,
+        int sortOrder
+    ) throws Exception {
+        if (categoryId == null || categoryId.isBlank()) {
+            throw new IllegalArgumentException("categoryId is required");
+        }
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("name is required");
+        }
+        if (type == null) {
+            throw new IllegalArgumentException("type is required");
+        }
+
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("name", name.trim());
+        updates.put("type", type.name());
+        updates.put("parentName", parentName == null ? "" : parentName.trim());
+        updates.put("iconKey", iconKey == null || iconKey.isBlank() ? "dot" : iconKey.trim());
+        updates.put("sortOrder", Math.max(0, sortOrder));
+        updates.put("updatedAt", Timestamp.now());
+
+        Tasks.await(
+            firestore.collection(USERS_COLLECTION)
+                .document(userId)
+                .collection(CATEGORIES_COLLECTION)
+                .document(categoryId)
+                .update(updates)
+        );
+    }
+
     public void seedDefaultCategories(String userId) throws Exception {
         CollectionReference categoriesRef = firestore.collection(USERS_COLLECTION)
             .document(userId)
             .collection(CATEGORIES_COLLECTION);
 
         List<DocumentSnapshot> existingDocs = Tasks.await(categoriesRef.get()).getDocuments();
+        Set<String> retiredIdentities = new HashSet<>();
+        retiredIdentities.add(
+            FirestoreDefaultCategoriesKt.categoryIdentity(
+                TransactionType.INCOME,
+                "",
+                "Lãi tiết kiệm"
+            )
+        );
+        retiredIdentities.add(
+            FirestoreDefaultCategoriesKt.categoryIdentity(
+                TransactionType.EXPENSE,
+                "Tiền ra",
+                "Đầu tư"
+            )
+        );
+        retiredIdentities.add(
+            FirestoreDefaultCategoriesKt.categoryIdentity(
+                TransactionType.EXPENSE,
+                "Tiền ra",
+                "Khác"
+            )
+        );
         Set<String> existingKeys = new HashSet<>();
+        List<DocumentReference> docsToDelete = new ArrayList<>();
         for (DocumentSnapshot doc : existingDocs) {
             TransactionType type;
             try {
@@ -910,13 +969,16 @@ public class FirestoreFinanceRepository {
             } catch (IllegalArgumentException ex) {
                 type = TransactionType.EXPENSE;
             }
-            existingKeys.add(
-                FirestoreDefaultCategoriesKt.categoryIdentity(
-                    type,
-                    safe(doc.getString("parentName")),
-                    safe(doc.getString("name"))
-                )
+            String identity = FirestoreDefaultCategoriesKt.categoryIdentity(
+                type,
+                safe(doc.getString("parentName")),
+                safe(doc.getString("name"))
             );
+            if (retiredIdentities.contains(identity)) {
+                docsToDelete.add(doc.getReference());
+                continue;
+            }
+            existingKeys.add(identity);
         }
 
         Timestamp now = Timestamp.now();
@@ -933,11 +995,14 @@ public class FirestoreFinanceRepository {
             }
         }
 
-        if (missing.isEmpty()) {
+        if (missing.isEmpty() && docsToDelete.isEmpty()) {
             return;
         }
 
         WriteBatch batch = firestore.batch();
+        for (DocumentReference docRef : docsToDelete) {
+            batch.delete(docRef);
+        }
         for (TransactionCategory category : missing) {
             String docId = category.getId();
             if (docId == null || docId.isBlank()) {

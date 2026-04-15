@@ -177,11 +177,12 @@ public class CategoryActivity extends AppCompatActivity {
         FinanceViewModelFactory factory = new FinanceViewModelFactory(new FirestoreFinanceRepository(), userId);
         financeViewModel = new ViewModelProvider(this, factory).get(FinanceViewModel.class);
         financeViewModel.getUiStateLiveData().observe(this, this::renderFinanceState);
+        financeViewModel.ensureDefaultCategories();
     }
 
     private void renderFinanceState(@NonNull FinanceUiState state) {
         categories.clear();
-        categories.addAll(CategoryFallbackMerger.mergeWithFallbacks(state.getCategories()));
+        categories.addAll(state.getCategories());
         if (state.getErrorMessage() != null && !state.getErrorMessage().trim().isEmpty()
             && !state.getErrorMessage().contains("PERMISSION_DENIED")) {
             Toast.makeText(this, state.getErrorMessage(), Toast.LENGTH_SHORT).show();
@@ -308,15 +309,24 @@ public class CategoryActivity extends AppCompatActivity {
         ImageButton btnAction = view.findViewById(R.id.btnCategoryEntryAction);
 
         layoutIcon.getBackground().setTint(ContextCompat.getColor(this, CategoryUiHelper.iconBgForCategory(category)));
-        ivIcon.setImageResource(CategoryUiHelper.iconResForCategory(category));
-        ivIcon.setImageTintList(ContextCompat.getColorStateList(this, CategoryUiHelper.iconTintForCategory(category)));
+        boolean loadedFromAssets = CategoryAssetIconLoader.applyCategoryIcon(
+            ivIcon,
+            category,
+            CategoryUiHelper.iconResForCategory(category)
+        );
+        ivIcon.setImageTintList(loadedFromAssets
+            ? null
+            : ContextCompat.getColorStateList(this, CategoryUiHelper.iconTintForCategory(category)));
         tvTitle.setText(category.getName());
         tvSubtitle.setVisibility(View.VISIBLE);
         tvSubtitle.setText(subtitle == null || subtitle.trim().isEmpty()
             ? getString(R.string.label_category_group_other)
             : subtitle);
-        boolean isFallback = category.getId() != null && category.getId().startsWith("fallback_");
-        if (isFallback) {
+        boolean hasValidId = category.getId() != null && !category.getId().trim().isEmpty();
+        if (hasValidId) {
+            view.setOnClickListener(v -> openEditCategory(category));
+        }
+        if (!hasValidId) {
             btnAction.setVisibility(View.GONE);
         } else {
             btnAction.setVisibility(View.VISIBLE);
@@ -329,6 +339,18 @@ public class CategoryActivity extends AppCompatActivity {
             view.setLayoutParams(params);
         }
         listContainer.addView(view);
+    }
+
+    private void openEditCategory(@NonNull TransactionCategory category) {
+        Intent intent = new Intent(this, CategoryFormActivity.class);
+        intent.putExtra(CategoryFormActivity.EXTRA_INITIAL_TYPE, category.getType().name());
+        intent.putExtra(CategoryFormActivity.EXTRA_EDIT_CATEGORY_ID, category.getId());
+        intent.putExtra(CategoryFormActivity.EXTRA_EDIT_CATEGORY_NAME, category.getName());
+        intent.putExtra(CategoryFormActivity.EXTRA_EDIT_CATEGORY_TYPE, category.getType().name());
+        intent.putExtra(CategoryFormActivity.EXTRA_EDIT_CATEGORY_PARENT_NAME, safe(category.getParentName()));
+        intent.putExtra(CategoryFormActivity.EXTRA_EDIT_CATEGORY_ICON_KEY, safe(category.getIconKey()));
+        intent.putExtra(CategoryFormActivity.EXTRA_EDIT_CATEGORY_SORT_ORDER, category.getSortOrder());
+        startActivity(intent);
     }
 
     private void confirmDelete(TransactionCategory category) {
@@ -362,5 +384,9 @@ public class CategoryActivity extends AppCompatActivity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value.trim();
     }
 }

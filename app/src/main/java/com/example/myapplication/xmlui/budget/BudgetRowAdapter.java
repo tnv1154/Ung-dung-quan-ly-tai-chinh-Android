@@ -1,9 +1,11 @@
 package com.example.myapplication.xmlui;
 
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -14,6 +16,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.myapplication.R;
 import com.example.myapplication.finance.model.BudgetLimit;
+import com.example.myapplication.finance.model.TransactionType;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -94,7 +97,7 @@ public class BudgetRowAdapter extends RecyclerView.Adapter<BudgetRowAdapter.Budg
     public void onBindViewHolder(@NonNull BudgetViewHolder holder, int position) {
         UiBudget item = items.get(position);
         Context context = holder.itemView.getContext();
-        holder.tvIcon.setText(resolveBudgetIcon(item));
+        applyBudgetCategoryIcon(holder, context, item);
         holder.tvName.setText(item.getName());
         holder.tvPeriod.setText(formatPeriod(context, item));
         holder.tvLimit.setText(UiFormatters.money(item.getLimitAmount()));
@@ -139,7 +142,7 @@ public class BudgetRowAdapter extends RecyclerView.Adapter<BudgetRowAdapter.Budg
     }
 
     static class BudgetViewHolder extends RecyclerView.ViewHolder {
-        final TextView tvIcon;
+        final ImageView ivIcon;
         final TextView tvName;
         final TextView tvPeriod;
         final TextView tvLimit;
@@ -149,7 +152,7 @@ public class BudgetRowAdapter extends RecyclerView.Adapter<BudgetRowAdapter.Budg
 
         BudgetViewHolder(@NonNull View itemView) {
             super(itemView);
-            tvIcon = itemView.findViewById(R.id.tvBudgetIcon);
+            ivIcon = itemView.findViewById(R.id.ivBudgetIcon);
             tvName = itemView.findViewById(R.id.tvBudgetName);
             tvPeriod = itemView.findViewById(R.id.tvBudgetPeriod);
             tvLimit = itemView.findViewById(R.id.tvBudgetLimit);
@@ -159,19 +162,35 @@ public class BudgetRowAdapter extends RecyclerView.Adapter<BudgetRowAdapter.Budg
         }
     }
 
-    private String resolveBudgetIcon(UiBudget item) {
+    private void applyBudgetCategoryIcon(BudgetViewHolder holder, Context context, UiBudget item) {
+        String categoryName = resolveBudgetCategoryName(context, item);
+        String iconKey = CategoryUiHelper.inferIconKeyFromCategoryName(categoryName, TransactionType.EXPENSE);
+        holder.ivIcon.getBackground().setTint(
+            ContextCompat.getColor(context, CategoryUiHelper.iconBgForKey(iconKey, TransactionType.EXPENSE))
+        );
+        int fallbackRes = CategoryUiHelper.iconResForKey(iconKey, TransactionType.EXPENSE);
+        boolean loadedFromAssets = CategoryAssetIconLoader.applyCategoryIcon(
+            holder.ivIcon,
+            TransactionType.EXPENSE,
+            categoryName,
+            fallbackRes
+        );
+        holder.ivIcon.setImageTintList(loadedFromAssets
+            ? null
+            : ColorStateList.valueOf(
+                ContextCompat.getColor(context, CategoryUiHelper.iconTintForKey(iconKey, TransactionType.EXPENSE))
+            ));
+    }
+
+    private String resolveBudgetCategoryName(Context context, UiBudget item) {
         if (BudgetLimit.CATEGORY_ALL.equalsIgnoreCase(item.getCategory())) {
-            return "*";
+            return context.getString(R.string.category_icon_money_out);
         }
         String source = item.getCategory() == null ? "" : item.getCategory().trim();
         if (source.isEmpty()) {
             source = item.getName();
         }
-        if (source == null || source.trim().isEmpty()) {
-            return "$";
-        }
-        String first = source.trim().substring(0, 1).toUpperCase(Locale.ROOT);
-        return first;
+        return source == null ? "" : source.trim();
     }
 
     private String formatPeriod(Context context, UiBudget item) {

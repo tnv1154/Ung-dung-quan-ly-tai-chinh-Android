@@ -186,10 +186,14 @@ public class BudgetCategoryPickerActivity extends AppCompatActivity {
             iconContainer.setBackgroundTintList(
                 ColorStateList.valueOf(getColor(CategoryUiHelper.iconBgForCategory(rowItem.category)))
             );
-            ivIcon.setImageResource(CategoryUiHelper.iconResForCategory(rowItem.category));
-            ivIcon.setImageTintList(
-                ColorStateList.valueOf(getColor(CategoryUiHelper.iconTintForCategory(rowItem.category)))
+            boolean loadedFromAssets = CategoryAssetIconLoader.applyCategoryIcon(
+                ivIcon,
+                rowItem.category,
+                CategoryUiHelper.iconResForCategory(rowItem.category)
             );
+            ivIcon.setImageTintList(loadedFromAssets
+                ? null
+                : ColorStateList.valueOf(getColor(CategoryUiHelper.iconTintForCategory(rowItem.category))));
             tvName.setText(rowItem.category.getName());
             if (rowItem.parent) {
                 tvName.setTextColor(getColor(R.color.add_mode_blue));

@@ -35,6 +35,12 @@ import java.util.List;
 public class CategoryFormActivity extends AppCompatActivity {
 
     public static final String EXTRA_INITIAL_TYPE = "extra_initial_type";
+    public static final String EXTRA_EDIT_CATEGORY_ID = "extra_edit_category_id";
+    public static final String EXTRA_EDIT_CATEGORY_NAME = "extra_edit_category_name";
+    public static final String EXTRA_EDIT_CATEGORY_TYPE = "extra_edit_category_type";
+    public static final String EXTRA_EDIT_CATEGORY_PARENT_NAME = "extra_edit_category_parent_name";
+    public static final String EXTRA_EDIT_CATEGORY_ICON_KEY = "extra_edit_category_icon_key";
+    public static final String EXTRA_EDIT_CATEGORY_SORT_ORDER = "extra_edit_category_sort_order";
 
     private static final String[] ICON_KEYS = new String[] {
         "dot", "food", "transport", "utility", "money_in", "money_out", "gift", "health", "home", "other"
@@ -60,6 +66,10 @@ public class CategoryFormActivity extends AppCompatActivity {
     private TransactionType selectedType = TransactionType.EXPENSE;
     private String selectedParentName = "";
     private String selectedIconKey = ICON_KEYS[0];
+    private String editingCategoryId;
+    private TransactionType originalEditType = TransactionType.EXPENSE;
+    private String originalEditParentName = "";
+    private int editingSortOrder = 0;
 
     private MaterialButtonToggleGroup toggleGroup;
     private MaterialButton btnExpense;
@@ -105,10 +115,25 @@ public class CategoryFormActivity extends AppCompatActivity {
         if (intent == null) {
             return;
         }
-        String typeRaw = intent.getStringExtra(EXTRA_INITIAL_TYPE);
-        if ("INCOME".equalsIgnoreCase(typeRaw)) {
-            selectedType = TransactionType.INCOME;
+        editingCategoryId = safe(intent.getStringExtra(EXTRA_EDIT_CATEGORY_ID));
+        if (!editingCategoryId.isEmpty()) {
+            selectedType = parseType(intent.getStringExtra(EXTRA_EDIT_CATEGORY_TYPE), selectedType);
+            originalEditType = selectedType;
+            selectedParentName = safe(intent.getStringExtra(EXTRA_EDIT_CATEGORY_PARENT_NAME));
+            originalEditParentName = selectedParentName;
+            String iconFromEdit = safe(intent.getStringExtra(EXTRA_EDIT_CATEGORY_ICON_KEY));
+            if (!iconFromEdit.isEmpty()) {
+                selectedIconKey = iconFromEdit;
+            }
+            editingSortOrder = Math.max(0, intent.getIntExtra(EXTRA_EDIT_CATEGORY_SORT_ORDER, 0));
+            String editName = safe(intent.getStringExtra(EXTRA_EDIT_CATEGORY_NAME));
+            if (!editName.isEmpty()) {
+                etName.setText(editName);
+            }
+            return;
         }
+        String typeRaw = intent.getStringExtra(EXTRA_INITIAL_TYPE);
+        selectedType = parseType(typeRaw, selectedType);
     }
 
     private void setupToolbar() {
@@ -174,11 +199,12 @@ public class CategoryFormActivity extends AppCompatActivity {
         FinanceViewModelFactory factory = new FinanceViewModelFactory(new FirestoreFinanceRepository(), userId);
         financeViewModel = new ViewModelProvider(this, factory).get(FinanceViewModel.class);
         financeViewModel.getUiStateLiveData().observe(this, this::renderFinanceState);
+        financeViewModel.ensureDefaultCategories();
     }
 
     private void renderFinanceState(@NonNull FinanceUiState state) {
         categories.clear();
-        categories.addAll(CategoryFallbackMerger.mergeWithFallbacks(state.getCategories()));
+        categories.addAll(state.getCategories());
         if (state.getErrorMessage() != null && !state.getErrorMessage().trim().isEmpty()
             && !state.getErrorMessage().contains("PERMISSION_DENIED")) {
             Toast.makeText(this, state.getErrorMessage(), Toast.LENGTH_SHORT).show();
@@ -191,9 +217,14 @@ public class CategoryFormActivity extends AppCompatActivity {
 
     private void refreshUiState() {
         MaterialToolbar toolbar = findViewById(R.id.toolbarCategoryForm);
-        int titleRes = selectedType == TransactionType.INCOME
-            ? R.string.app_title_add_category_income
-            : R.string.app_title_add_category_expense;
+        int titleRes;
+        if (isEditMode()) {
+            titleRes = R.string.action_edit_categories;
+        } else {
+            titleRes = selectedType == TransactionType.INCOME
+                ? R.string.app_title_add_category_income
+                : R.string.app_title_add_category_expense;
+        }
         toolbar.setTitle(titleRes);
 
         layoutParent.setVisibility(selectedType == TransactionType.EXPENSE ? View.VISIBLE : View.GONE);
@@ -266,6 +297,9 @@ public class CategoryFormActivity extends AppCompatActivity {
         }
 
         for (TransactionCategory item : categories) {
+            if (isEditMode() && item.getId().equals(editingCategoryId)) {
+                continue;
+            }
             boolean sameType = item.getType() == selectedType;
             boolean sameName = item.getName().equalsIgnoreCase(name);
             boolean sameParent = safe(item.getParentName()).equalsIgnoreCase(safe(selectedParentName));
@@ -287,9 +321,41 @@ public class CategoryFormActivity extends AppCompatActivity {
             nextOrder = Math.max(nextOrder, item.getSortOrder() + 1);
         }
 
-        financeViewModel.addCategory(name, selectedType, selectedParentName, selectedIconKey, nextOrder);
-        Toast.makeText(this, R.string.message_category_added, Toast.LENGTH_SHORT).show();
+        if (isEditMode()) {
+            int resolvedSortOrder = editingSortOrder > 0 ? editingSortOrder : nextOrder;
+            boolean movedGroup = selectedType != originalEditType
+                || !safe(selectedParentName).equalsIgnoreCase(safe(originalEditParentName));
+            if (movedGroup) {
+                resolvedSortOrder = nextOrder;
+            }
+            financeViewModel.updateCategory(
+                editingCategoryId,
+                name,
+                selectedType,
+                selectedParentName,
+                selectedIconKey,
+                resolvedSortOrder
+            );
+            Toast.makeText(this, R.string.message_category_updated, Toast.LENGTH_SHORT).show();
+        } else {
+            financeViewModel.addCategory(name, selectedType, selectedParentName, selectedIconKey, nextOrder);
+            Toast.makeText(this, R.string.message_category_added, Toast.LENGTH_SHORT).show();
+        }
         finish();
+    }
+
+    private boolean isEditMode() {
+        return editingCategoryId != null && !editingCategoryId.isEmpty();
+    }
+
+    private TransactionType parseType(String rawType, TransactionType fallback) {
+        if ("INCOME".equalsIgnoreCase(safe(rawType))) {
+            return TransactionType.INCOME;
+        }
+        if ("EXPENSE".equalsIgnoreCase(safe(rawType))) {
+            return TransactionType.EXPENSE;
+        }
+        return fallback == null ? TransactionType.EXPENSE : fallback;
     }
 
     private String safe(String text) {

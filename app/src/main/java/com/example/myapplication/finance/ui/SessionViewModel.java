@@ -6,20 +6,21 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
-import com.google.firebase.auth.ActionCodeSettings;
+import com.example.myapplication.finance.data.FirestoreFinanceRepository;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.auth.UserProfileChangeRequest;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 public class SessionViewModel extends ViewModel {
-    private static final String SIGNUP_EMAIL_LINK_BASE_URL = "https://finance-management-app-3cbd8.firebaseapp.com/finishSignUp";
-    private static final String APP_PACKAGE_NAME = "com.example.myapplication";
-
     private final FirebaseAuth auth;
+    private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
     private final MutableLiveData<SessionUiState> uiStateLiveData = new MutableLiveData<>();
     private final FirebaseAuth.AuthStateListener authListener = firebaseAuth ->
         uiStateLiveData.postValue(new SessionUiState(false, firebaseAuth.getCurrentUser(), null));
@@ -57,6 +58,7 @@ public class SessionViewModel extends ViewModel {
         auth.createUserWithEmailAndPassword(email, password)
             .addOnSuccessListener(result -> {
                 FirebaseUser user = result.getUser();
+                seedDefaultCategoriesForNewUser(user);
                 String name = safe(displayName).trim();
                 if (user == null || name.isBlank()) {
                     setState(false, currentUser(), null);
@@ -99,7 +101,12 @@ public class SessionViewModel extends ViewModel {
         }
         setState(true, currentUser(), null);
         auth.signInWithCredential(GoogleAuthProvider.getCredential(idToken, null))
-            .addOnSuccessListener(result -> setState(false, currentUser(), null))
+            .addOnSuccessListener(result -> {
+                if (result.getAdditionalUserInfo() != null && result.getAdditionalUserInfo().isNewUser()) {
+                    seedDefaultCategoriesForNewUser(result.getUser());
+                }
+                setState(false, currentUser(), null);
+            })
             .addOnFailureListener(error -> setState(false, currentUser(), messageOrDefault(error, "Đăng nhập Google thất bại")));
     }
 
@@ -250,63 +257,6 @@ public class SessionViewModel extends ViewModel {
             });
     }
 
-    public void ensureEmailAvailable(String email, Consumer<String> onComplete) {
-        String normalized = safe(email).trim();
-        if (normalized.isBlank()) {
-            onComplete.accept("Vui lòng nhập email hợp lệ.");
-            return;
-        }
-        setState(true, currentUser(), null);
-        auth.fetchSignInMethodsForEmail(normalized)
-            .addOnSuccessListener(result -> {
-                setState(false, currentUser(), null);
-                List<String> methods = result.getSignInMethods();
-                if (methods == null || methods.isEmpty()) {
-                    onComplete.accept(null);
-                    return;
-                }
-                onComplete.accept("Email đã được đăng ký.");
-            })
-            .addOnFailureListener(error -> {
-                String message = messageOrDefault(error, "Không thể kiểm tra email.");
-                setState(false, currentUser(), message);
-                onComplete.accept(message);
-            });
-    }
-
-    public void sendSignupVerificationCode(String email, String verificationCode, Consumer<String> onComplete) {
-        String normalizedEmail = safe(email).trim();
-        String normalizedCode = safe(verificationCode).trim();
-        if (normalizedEmail.isBlank()) {
-            onComplete.accept("Vui lòng nhập email hợp lệ.");
-            return;
-        }
-        if (!normalizedCode.matches("\\d{6}")) {
-            onComplete.accept("Mã xác nhận phải gồm 6 chữ số.");
-            return;
-        }
-        String continueUrl = SIGNUP_EMAIL_LINK_BASE_URL + "?verify_code=" + normalizedCode;
-        ActionCodeSettings settings = ActionCodeSettings.newBuilder()
-            .setUrl(continueUrl)
-            .setHandleCodeInApp(true)
-            .setAndroidPackageName(APP_PACKAGE_NAME, true, null)
-            .build();
-        setState(true, currentUser(), null);
-        auth.sendSignInLinkToEmail(normalizedEmail, settings)
-            .addOnSuccessListener(unused -> {
-                setState(false, currentUser(), null);
-                onComplete.accept(null);
-            })
-            .addOnFailureListener(error -> {
-                String message = messageOrDefault(
-                    error,
-                    "Không thể gửi mã xác nhận email. Vui lòng kiểm tra cấu hình Email Link trong Firebase Authentication."
-                );
-                setState(false, currentUser(), message);
-                onComplete.accept(message);
-            });
-    }
-
     public void verifyPasswordResetCode(String resetCode, Consumer<String> onComplete) {
         String code = safe(resetCode).trim();
         if (code.isBlank()) {
@@ -362,7 +312,22 @@ public class SessionViewModel extends ViewModel {
     @Override
     protected void onCleared() {
         auth.removeAuthStateListener(authListener);
+        ioExecutor.shutdown();
         super.onCleared();
+    }
+
+    private void seedDefaultCategoriesForNewUser(FirebaseUser user) {
+        if (user == null || user.getUid() == null || user.getUid().isBlank()) {
+            return;
+        }
+        String userId = user.getUid();
+        ioExecutor.submit(() -> {
+            try {
+                new FirestoreFinanceRepository().seedDefaultCategories(userId);
+            } catch (Exception error) {
+                setState(false, currentUser(), messageOrDefault(error, "Không thể tạo hạng mục mặc định"));
+            }
+        });
     }
 
     private SessionUiState currentState() {
@@ -387,10 +352,47 @@ public class SessionViewModel extends ViewModel {
     }
 
     private static String messageOrDefault(Exception error, String fallback) {
+        String mappedAuthMessage = mapFirebaseAuthMessage(error);
+        if (mappedAuthMessage != null) {
+            return mappedAuthMessage;
+        }
         if (error == null || error.getMessage() == null || error.getMessage().isBlank()) {
             return fallback;
         }
         return error.getMessage();
+    }
+
+    private static String mapFirebaseAuthMessage(Exception error) {
+        if (!(error instanceof FirebaseAuthException)) {
+            return null;
+        }
+        String errorCode = ((FirebaseAuthException) error).getErrorCode();
+        if (errorCode == null || errorCode.isBlank()) {
+            return null;
+        }
+        if ("ERROR_INVALID_EMAIL".equals(errorCode)) {
+            return "Email không hợp lệ.";
+        }
+        if ("ERROR_EMAIL_ALREADY_IN_USE".equals(errorCode)) {
+            return "Email này đã được sử dụng.";
+        }
+        if ("ERROR_USER_NOT_FOUND".equals(errorCode)) {
+            return "Email không tồn tại.";
+        }
+        if ("ERROR_WRONG_PASSWORD".equals(errorCode)) {
+            return "Mật khẩu không chính xác.";
+        }
+        if ("ERROR_WEAK_PASSWORD".equals(errorCode)) {
+            return "Mật khẩu quá yếu. Vui lòng dùng mật khẩu mạnh hơn.";
+        }
+        if ("ERROR_TOO_MANY_REQUESTS".equals(errorCode)) {
+            return "Bạn thao tác quá nhiều lần. Vui lòng thử lại sau.";
+        }
+        if ("ERROR_OPERATION_NOT_ALLOWED".equals(errorCode)) {
+            return "Phương thức đăng nhập này chưa được bật trong Firebase Authentication. "
+                + "Vào Firebase Console > Authentication > Sign-in method để bật provider tương ứng.";
+        }
+        return null;
     }
 }
 

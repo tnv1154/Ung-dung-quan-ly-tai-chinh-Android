@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.myapplication.R;
+import com.example.myapplication.finance.model.TransactionType;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -75,8 +76,13 @@ public class ReportBudgetUsageAdapter extends RecyclerView.Adapter<ReportBudgetU
         UiReportBudgetUsage item = items.get(position);
         boolean exceeded = item.getRatio() > 1.0;
         holder.iconContainer.setBackgroundTintList(ColorStateList.valueOf(item.getIconBgColor()));
-        holder.icon.setImageResource(item.getIconRes());
-        holder.icon.setImageTintList(ColorStateList.valueOf(item.getIconTintColor()));
+        boolean loadedFromAssets = CategoryAssetIconLoader.applyCategoryIcon(
+            holder.icon,
+            TransactionType.EXPENSE,
+            item.getName(),
+            item.getIconRes()
+        );
+        holder.icon.setImageTintList(loadedFromAssets ? null : ColorStateList.valueOf(item.getIconTintColor()));
         holder.name.setText(item.getName());
         holder.percent.setText(holder.itemView.getContext().getString(R.string.format_percent_int, (int) Math.round(item.getRatio() * 100.0)));
         holder.percent.setTextColor(holder.itemView.getContext().getColor(exceeded ? R.color.error_red : R.color.overview_warning_text));

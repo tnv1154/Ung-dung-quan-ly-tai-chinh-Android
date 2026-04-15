@@ -881,6 +881,32 @@ public class FinanceViewModel extends ViewModel {
         });
     }
 
+    public void updateCategory(
+        String categoryId,
+        String name,
+        TransactionType type,
+        String parentName,
+        String iconKey,
+        int sortOrder
+    ) {
+        ioExecutor.submit(() -> {
+            try {
+                repository.updateCategory(
+                    userId,
+                    categoryId,
+                    name,
+                    type,
+                    parentName,
+                    iconKey,
+                    sortOrder
+                );
+                refreshFromCacheOnly();
+            } catch (Exception error) {
+                postError("Không thể cập nhật hạng mục", error);
+            }
+        });
+    }
+
     public void ensureDefaultCategories() {
         if (requestedDefaultCategories) {
             return;
@@ -889,6 +915,7 @@ public class FinanceViewModel extends ViewModel {
         ioExecutor.submit(() -> {
             try {
                 repository.seedDefaultCategories(userId);
+                refreshFromCacheOnly();
             } catch (Exception error) {
                 requestedDefaultCategories = false;
                 postError("Không thể tạo hạng mục mặc định", error);
